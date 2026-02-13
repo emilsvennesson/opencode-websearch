@@ -1,6 +1,6 @@
 {
   "name": "opencode-websearch",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Claude Code's WebSearch tool ported to OpenCode",
   "type": "module",
   "main": "dist/index.js",
