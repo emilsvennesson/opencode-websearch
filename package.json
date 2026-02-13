@@ -35,7 +35,7 @@
     "url": "https://github.com/emilsvennesson/opencode-websearch.git"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
   },
   "license": "MIT",
   "dependencies": {
