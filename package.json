@@ -1,6 +1,6 @@
 {
   "name": "opencode-websearch",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Claude Code's WebSearch tool ported to OpenCode",
   "type": "module",
   "main": "dist/index.js",
@@ -30,6 +30,10 @@
     "anthropic",
     "ai"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/emilsvennesson/opencode-websearch.git"
+  },
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.52.0"
