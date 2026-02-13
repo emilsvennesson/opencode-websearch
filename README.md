@@ -16,40 +16,48 @@ OpenCode will install it automatically at startup.
 
 ## Configuration
 
-The plugin needs an Anthropic API key. It resolves credentials in this order:
+The plugin looks for an Anthropic provider (`@ai-sdk/anthropic`) with `"websearch": true` set on at least one model. It picks up credentials however you've configured them in OpenCode -- via `/connect`, environment variables, or `options.apiKey` in your config.
 
-1. **opencode.json** -- looks for an `@ai-sdk/anthropic` provider in your project or global config
-2. **Environment variable** -- falls back to `ANTHROPIC_API_KEY`
-
-### Option 1: opencode.json provider (recommended)
-
-If you already have an Anthropic provider configured, the plugin will use it automatically:
+Add `"websearch": true` to the model you want the plugin to use for searches:
 
 ```json
 {
   "provider": {
     "anthropic": {
-      "npm": "@ai-sdk/anthropic",
-      "options": {
-        "apiKey": "{env:ANTHROPIC_API_KEY}"
-      },
       "models": {
-        "claude-sonnet-4-5": { "name": "Claude Sonnet 4.5" }
+        "claude-sonnet-4-5": {
+          "options": {
+            "websearch": true
+          }
+        }
       }
     }
   }
 }
 ```
 
-The model used for search is the first model listed in the provider config.
+This also works with custom providers that use `@ai-sdk/anthropic`, such as a LiteLLM proxy:
 
-### Option 2: environment variable
-
-```sh
-export ANTHROPIC_API_KEY=sk-ant-...
+```json
+{
+  "provider": {
+    "my-anthropic": {
+      "npm": "@ai-sdk/anthropic",
+      "options": {
+        "baseURL": "http://localhost:4000/v1/",
+        "apiKey": "{env:MY_API_KEY}"
+      },
+      "models": {
+        "claude-sonnet-4-5": {
+          "options": {
+            "websearch": true
+          }
+        }
+      }
+    }
+  }
+}
 ```
-
-When using the env var fallback, `claude-sonnet-4-5` is used as the default model.
 
 ## Usage
 

@@ -5,6 +5,7 @@ import { AnthropicConfig } from "./types.js";
 
 interface ProviderData {
   id: string;
+  key?: string;
   models: Record<string, { api: { npm: string }; id: string; options: Record<string, unknown> }>;
   options: Record<string, unknown>;
 }
@@ -43,7 +44,7 @@ const resolveFromProviders = (providers: ProviderData[]): AnthropicConfig | null
   for (const provider of providers) {
     for (const model of Object.values(provider.models)) {
       if (isAnthropicModel(model) && hasWebSearch(model)) {
-        const apiKey = extractApiKey(provider.options);
+        const apiKey = provider.key ?? extractApiKey(provider.options);
         if (!apiKey) {
           return null;
         }
