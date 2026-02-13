@@ -1,18 +1,32 @@
 import { MAX_SEARCH_USES, MIN_QUERY_LENGTH, MIN_SEARCH_USES } from "./constants.js";
 import { Plugin, tool } from "@opencode-ai/plugin";
+import { ProviderData, formatConfigError, resolveFromProviders } from "./config.js";
 import { executeSearch, formatErrorMessage } from "./providers/anthropic.js";
-import { formatConfigError, resolveFromProviders } from "./config.js";
+import { AnthropicConfig } from "./types.js";
 import { getCurrentMonthYear } from "./helpers.js";
+
+// ── Config resolution (lazy) ───────────────────────────────────────────
+
+/**
+ * Resolve config from the SDK at execute-time, not init-time.
+ * Calling client.config.providers() during plugin init causes a deadlock
+ * because the server is still bootstrapping when plugins are loaded.
+ */
+const resolveConfig = async (client: {
+  config: { providers: () => Promise<{ data?: { providers: unknown[] } }> };
+}): Promise<AnthropicConfig | null> => {
+  const { data } = await client.config.providers();
+  if (data) {
+    return resolveFromProviders(data.providers as ProviderData[]);
+  }
+  return null;
+};
 
 // ── Plugin ─────────────────────────────────────────────────────────────
 
 // oxlint-disable-next-line import/no-default-export -- plugin entry point requires default export
 export default (async (input) => {
-  const { data } = await input.client.config.providers();
-  let config = null;
-  if (data) {
-    config = resolveFromProviders(data.providers);
-  }
+  let config: AnthropicConfig | null = null;
 
   return {
     tool: {
@@ -60,6 +74,10 @@ IMPORTANT - Use the correct year in search queries:
   - Example: If the user asks for "latest React docs", search for "React documentation" with the current year, NOT last year`,
 
         async execute(args) {
+          if (!config) {
+            config = await resolveConfig(input.client);
+          }
+
           if (!config) {
             return formatConfigError();
           }

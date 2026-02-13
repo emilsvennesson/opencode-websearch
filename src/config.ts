@@ -83,4 +83,4 @@ Steps:
 3. Add \`"websearch": true\` to the \`options\` of the Claude model you want to use for web search
 4. Restart OpenCode to pick up the configuration change`;
 
-export { formatConfigError, resolveFromProviders };
+export { formatConfigError, ProviderData, resolveFromProviders };
