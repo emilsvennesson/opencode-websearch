@@ -18,6 +18,9 @@ const resolveEnvVar = (value: string): string => {
   return value;
 };
 
+const getCurrentMonthYear = (): string =>
+  new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
 const normalizeBaseURL = (url: string): string => url.replace(/\/v1\/?$/, "");
 
-export { getTodayDate, normalizeBaseURL, resolveEnvVar };
+export { getCurrentMonthYear, getTodayDate, normalizeBaseURL, resolveEnvVar };
