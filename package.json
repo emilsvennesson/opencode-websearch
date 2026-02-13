@@ -1,0 +1,46 @@
+{
+  "name": "opencode-websearch",
+  "version": "0.1.0",
+  "description": "Claude Code's WebSearch tool ported to OpenCode",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "bun build src/index.ts --outdir dist --target node --format esm --packages external && bun run build:types",
+    "build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
+    "dev": "bun run --watch src/index.ts",
+    "lint": "oxlint --tsconfig tsconfig.json src/",
+    "typecheck": "tsc --noEmit",
+    "check": "bun run lint && bun run typecheck",
+    "prepublishOnly": "bun run check && bun run build"
+  },
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "web-search",
+    "anthropic",
+    "ai"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.52.0"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "^1.1.65",
+    "@types/bun": "latest",
+    "oxlint": "^1.47.0",
+    "typescript": "^5.8.0"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": ">=1.0.0"
+  }
+}

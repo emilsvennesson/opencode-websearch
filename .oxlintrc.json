@@ -1,0 +1,23 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["unicorn", "typescript", "import", "oxc"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn",
+    "perf": "warn",
+    "style": "warn"
+  },
+  "rules": {
+    "no-unused-vars": "off",
+    "typescript/no-unused-vars": "error",
+    "unicorn/no-null": "off",
+    "unicorn/prefer-top-level-await": "off",
+    "unicorn/filename-case": "off",
+    "unicorn/prevent-abbreviations": "off",
+    "unicorn/no-array-for-each": "warn",
+    "unicorn/prefer-string-replace-all": "warn",
+    "unicorn/prefer-ternary": "off",
+    "import/no-nodejs-modules": "off"
+  },
+  "ignorePatterns": ["dist", "node_modules"]
+}
