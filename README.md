@@ -68,15 +68,36 @@ Results are returned as formatted markdown with source links.
 
 ## Development
 
+### Local Development
+
+To develop or customize the plugin locally, clone the repo and symlink the
+source entry point into your OpenCode plugin directory:
+
 ```sh
-# Install dependencies
+git clone https://github.com/emilsvennesson/opencode-websearch ~/.config/opencode/opencode-websearch
+cd ~/.config/opencode/opencode-websearch
 bun install
+mkdir -p ~/.config/opencode/plugin
+ln -sf ~/.config/opencode/opencode-websearch/src/index.ts ~/.config/opencode/plugin/websearch.ts
+```
 
-# Type check
-bun run typecheck
+OpenCode will load the plugin directly from source on startup. Any edits to the
+files in `src/` take effect next time you start OpenCode.
 
-# Build
-bun run build
+> **Note:** When using the symlink approach, remove `"opencode-websearch"` from
+> the `plugin` array in your `opencode.json` to avoid loading the plugin twice.
+
+### Commands
+
+```sh
+bun install            # install dependencies
+bun run format         # auto-format source files
+bun run format:check   # verify formatting (no changes)
+bun run lint           # run oxlint
+bun run lint:fix       # auto-fix lint issues
+bun run typecheck      # type check with tsc
+bun run check          # format:check + lint + typecheck (full quality gate)
+bun run build          # ESM bundle + declaration files → dist/
 ```
 
 ## License
