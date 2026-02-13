@@ -4,8 +4,8 @@ import { AnthropicConfig } from "./types.js";
 // ── Types ──────────────────────────────────────────────────────────────
 
 interface ProviderData {
+  id: string;
   models: Record<string, { api: { npm: string }; id: string; options: Record<string, unknown> }>;
-  key?: string;
   options: Record<string, unknown>;
 }
 
@@ -18,6 +18,13 @@ const hasWebSearch = (model: { options: Record<string, unknown> }): boolean =>
   model.options.websearch === true;
 
 const normalizeBaseURL = (url: string): string => url.replace(/\/v1\/?$/, "");
+
+const extractApiKey = (options: Record<string, unknown>): string | undefined => {
+  if (typeof options.apiKey !== "string") {
+    return undefined;
+  }
+  return options.apiKey;
+};
 
 const extractBaseURL = (options: Record<string, unknown>): string | undefined => {
   if (typeof options.baseURL !== "string") {
@@ -36,11 +43,12 @@ const resolveFromProviders = (providers: ProviderData[]): AnthropicConfig | null
   for (const provider of providers) {
     for (const model of Object.values(provider.models)) {
       if (isAnthropicModel(model) && hasWebSearch(model)) {
-        if (!provider.key) {
+        const apiKey = extractApiKey(provider.options);
+        if (!apiKey) {
           return null;
         }
         return {
-          apiKey: provider.key,
+          apiKey,
           baseURL: extractBaseURL(provider.options),
           model: model.id,
         };

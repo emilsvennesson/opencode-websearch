@@ -16,8 +16,6 @@ const resolveConfig = async (client: {
   config: { providers: () => Promise<{ data?: { providers: unknown[] } }> };
 }): Promise<AnthropicConfig | null> => {
   const { data } = await client.config.providers();
-  // eslint-disable-next-line no-console -- temporary debug logging
-  console.log("[web-search debug] providers data:", JSON.stringify(data, null, 2));
   if (data) {
     return resolveFromProviders(data.providers as ProviderData[]);
   }
