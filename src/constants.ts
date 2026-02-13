@@ -1,10 +1,8 @@
 // ── Constants ──────────────────────────────────────────────────────────
 
-const DEFAULT_MODEL = "claude-sonnet-4-5";
+const ANTHROPIC_NPM_PACKAGE = "@ai-sdk/anthropic";
 const DEFAULT_SEARCH_USES = 5;
 const EMPTY_LENGTH = 0;
-const ENV_VAR_CAPTURE_GROUP = 1;
-const FIRST_MODEL_INDEX = 0;
 const MAX_RESPONSE_TOKENS = 16_000;
 const MAX_SEARCH_USES = 10;
 const MIN_QUERY_LENGTH = 2;
@@ -13,11 +11,9 @@ const MONTH_OFFSET = 1;
 const PAD_LENGTH = 2;
 
 export {
-  DEFAULT_MODEL,
+  ANTHROPIC_NPM_PACKAGE,
   DEFAULT_SEARCH_USES,
   EMPTY_LENGTH,
-  ENV_VAR_CAPTURE_GROUP,
-  FIRST_MODEL_INDEX,
   MAX_RESPONSE_TOKENS,
   MAX_SEARCH_USES,
   MIN_QUERY_LENGTH,

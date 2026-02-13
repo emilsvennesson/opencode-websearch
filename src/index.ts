@@ -1,33 +1,40 @@
 import { MAX_SEARCH_USES, MIN_QUERY_LENGTH, MIN_SEARCH_USES } from "./constants.js";
 import { Plugin, tool } from "@opencode-ai/plugin";
 import { executeSearch, formatErrorMessage } from "./providers/anthropic.js";
-import { formatConfigError, getAnthropicConfig } from "./config.js";
+import { formatConfigError, resolveFromProviders } from "./config.js";
 import { getCurrentMonthYear } from "./helpers.js";
 
 // ── Plugin ─────────────────────────────────────────────────────────────
 
-// eslint-disable-next-line import/no-default-export
-export default (async () => ({
-  tool: {
-    "web-search": tool({
-      args: {
-        allowed_domains: tool.schema
-          .array(tool.schema.string())
-          .optional()
-          .describe("Only include results from these domains"),
-        blocked_domains: tool.schema
-          .array(tool.schema.string())
-          .optional()
-          .describe("Exclude results from these domains"),
-        max_uses: tool.schema
-          .number()
-          .min(MIN_SEARCH_USES)
-          .max(MAX_SEARCH_USES)
-          .optional()
-          .describe("Maximum number of searches to perform (default: 5)"),
-        query: tool.schema.string().min(MIN_QUERY_LENGTH).describe("The search query to execute"),
-      },
-      description: `- Allows OpenCode to search the web and use the results to inform responses
+// oxlint-disable-next-line import/no-default-export -- plugin entry point requires default export
+export default (async (input) => {
+  const { data } = await input.client.config.providers();
+  let config = null;
+  if (data) {
+    config = resolveFromProviders(data.providers);
+  }
+
+  return {
+    tool: {
+      "web-search": tool({
+        args: {
+          allowed_domains: tool.schema
+            .array(tool.schema.string())
+            .optional()
+            .describe("Only include results from these domains"),
+          blocked_domains: tool.schema
+            .array(tool.schema.string())
+            .optional()
+            .describe("Exclude results from these domains"),
+          max_uses: tool.schema
+            .number()
+            .min(MIN_SEARCH_USES)
+            .max(MAX_SEARCH_USES)
+            .optional()
+            .describe("Maximum number of searches to perform (default: 5)"),
+          query: tool.schema.string().min(MIN_QUERY_LENGTH).describe("The search query to execute"),
+        },
+        description: `- Allows OpenCode to search the web and use the results to inform responses
 - Provides up-to-date information for current events and recent data
 - Returns search result information formatted as search result blocks, including links as markdown hyperlinks
 - Use this tool for accessing information beyond the model's knowledge cutoff
@@ -52,23 +59,22 @@ IMPORTANT - Use the correct year in search queries:
   - It is currently ${getCurrentMonthYear()}. You MUST use this when searching for recent information, documentation, or current events.
   - Example: If the user asks for "latest React docs", search for "React documentation" with the current year, NOT last year`,
 
-      async execute(args) {
-        const { config, error } = getAnthropicConfig();
+        async execute(args) {
+          if (!config) {
+            return formatConfigError();
+          }
 
-        if (!config) {
-          return formatConfigError(error);
-        }
+          if (args.allowed_domains && args.blocked_domains) {
+            return "Error: Cannot specify both allowed_domains and blocked_domains.";
+          }
 
-        if (args.allowed_domains && args.blocked_domains) {
-          return "Error: Cannot specify both allowed_domains and blocked_domains.";
-        }
-
-        try {
-          return await executeSearch(config, args);
-        } catch (error) {
-          return formatErrorMessage(error);
-        }
-      },
-    }),
-  },
-})) satisfies Plugin;
+          try {
+            return await executeSearch(config, args);
+          } catch (error) {
+            return formatErrorMessage(error);
+          }
+        },
+      }),
+    },
+  };
+}) satisfies Plugin;

@@ -6,30 +6,6 @@ interface AnthropicConfig {
   model: string;
 }
 
-interface OpenCodeProvider {
-  models?: Record<string, { name?: string }>;
-  npm?: string;
-  options?: {
-    apiKey?: string;
-    baseURL?: string;
-  };
-}
-
-interface OpenCodeConfig {
-  provider?: Record<string, OpenCodeProvider>;
-}
-
-interface ConfigResult {
-  config: AnthropicConfig | null;
-  error?: string;
-}
-
-interface ProviderContext {
-  configPath: string;
-  errors: string[];
-  providerName: string;
-}
-
 // ── Anthropic Response Types ───────────────────────────────────────────
 
 interface WebSearchResult {
@@ -62,11 +38,7 @@ type ContentBlock = { text: string; type: "text" } | ServerToolUse | WebSearchTo
 
 export {
   AnthropicConfig,
-  ConfigResult,
   ContentBlock,
-  OpenCodeConfig,
-  OpenCodeProvider,
-  ProviderContext,
   SearchUsage,
   ServerToolUse,
   WebSearchResult,

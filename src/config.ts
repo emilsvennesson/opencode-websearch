@@ -1,187 +1,63 @@
-import {
-  AnthropicConfig,
-  ConfigResult,
-  OpenCodeConfig,
-  OpenCodeProvider,
-  ProviderContext,
-} from "./types.js";
-import {
-  DEFAULT_MODEL,
-  EMPTY_LENGTH,
-  ENV_VAR_CAPTURE_GROUP,
-  FIRST_MODEL_INDEX,
-} from "./constants.js";
-import { existsSync, readFileSync } from "node:fs";
-import { normalizeBaseURL, resolveEnvVar } from "./helpers.js";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { ANTHROPIC_NPM_PACKAGE } from "./constants.js";
+import { AnthropicConfig } from "./types.js";
+
+// ── Types ──────────────────────────────────────────────────────────────
+
+interface ProviderData {
+  models: Record<string, { api: { npm: string }; id: string; options: Record<string, unknown> }>;
+  key?: string;
+  options: Record<string, unknown>;
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────
+
+const isAnthropicModel = (model: { api: { npm: string } }): boolean =>
+  model.api.npm === ANTHROPIC_NPM_PACKAGE;
+
+const hasWebSearch = (model: { options: Record<string, unknown> }): boolean =>
+  model.options.websearch === true;
+
+const normalizeBaseURL = (url: string): string => url.replace(/\/v1\/?$/, "");
+
+const extractBaseURL = (options: Record<string, unknown>): string | undefined => {
+  if (typeof options.baseURL !== "string") {
+    return undefined;
+  }
+  return normalizeBaseURL(options.baseURL);
+};
 
 // ── Config resolution ──────────────────────────────────────────────────
 
-const CONFIG_PATHS = [
-  join(process.cwd(), "opencode.json"),
-  join(process.cwd(), ".opencode", "opencode.json"),
-  join(homedir(), ".config", "opencode", "opencode.json"),
-];
-
-const parseConfigFile = (configPath: string): OpenCodeConfig | string => {
-  try {
-    return JSON.parse(readFileSync(configPath, "utf8")) as OpenCodeConfig;
-  } catch (error) {
-    if (error instanceof SyntaxError) {
-      return `Failed to parse ${configPath}: ${error.message}`;
-    }
-    return `Failed to parse ${configPath}: ${String(error)}`;
-  }
-};
-
-const resolveProviderApiKey = (ctx: ProviderContext, rawApiKey: string): string | undefined => {
-  const apiKey = resolveEnvVar(rawApiKey);
-  if (apiKey) {
-    return apiKey;
-  }
-
-  const envMatch = rawApiKey.match(/^\{env:(\w+)\}$/);
-  if (envMatch) {
-    ctx.errors.push(
-      `${ctx.configPath}: Environment variable ${envMatch[ENV_VAR_CAPTURE_GROUP]} is not set`,
-    );
-  } else {
-    ctx.errors.push(`${ctx.configPath}: Provider "${ctx.providerName}" has empty apiKey`);
-  }
-  return undefined;
-};
-
-const resolveModelName = (provider: OpenCodeProvider): string => {
-  if (!provider.models) {
-    return DEFAULT_MODEL;
-  }
-  const models = Object.keys(provider.models);
-  return models[FIRST_MODEL_INDEX] ?? DEFAULT_MODEL;
-};
-
-const resolveBaseURL = (provider: OpenCodeProvider): string | undefined => {
-  if (!provider.options?.baseURL) {
-    return undefined;
-  }
-  return normalizeBaseURL(resolveEnvVar(provider.options.baseURL));
-};
-
-const resolveProviderConfig = (
-  ctx: ProviderContext,
-  provider: OpenCodeProvider,
-): AnthropicConfig | undefined => {
-  if (provider.npm !== "@ai-sdk/anthropic") {
-    return undefined;
-  }
-
-  if (!provider.options?.apiKey) {
-    ctx.errors.push(`${ctx.configPath}: Provider "${ctx.providerName}" has no apiKey configured`);
-    return undefined;
-  }
-
-  const apiKey = resolveProviderApiKey(ctx, provider.options.apiKey);
-  if (!apiKey) {
-    return undefined;
-  }
-
-  return {
-    apiKey,
-    baseURL: resolveBaseURL(provider),
-    model: resolveModelName(provider),
-  };
-};
-
-const scanProviders = (
-  configPath: string,
-  providers: Record<string, OpenCodeProvider>,
-  errors: string[],
-): AnthropicConfig | undefined => {
-  for (const [providerName, provider] of Object.entries(providers)) {
-    const ctx: ProviderContext = { configPath, errors, providerName };
-    const resolved = resolveProviderConfig(ctx, provider);
-    if (resolved) {
-      return resolved;
-    }
-  }
-  return undefined;
-};
-
-const scanConfigFile = (configPath: string, errors: string[]): AnthropicConfig | undefined => {
-  if (!existsSync(configPath)) {
-    return undefined;
-  }
-
-  const parsed = parseConfigFile(configPath);
-  if (typeof parsed === "string") {
-    errors.push(parsed);
-    return undefined;
-  }
-
-  if (!parsed.provider) {
-    errors.push(`${configPath}: No "provider" field found`);
-    return undefined;
-  }
-
-  return scanProviders(configPath, parsed.provider, errors);
-};
-
-const scanAllConfigFiles = (errors: string[]): AnthropicConfig | undefined => {
-  for (const configPath of CONFIG_PATHS) {
-    const resolved = scanConfigFile(configPath, errors);
-    if (resolved) {
-      return resolved;
-    }
-  }
-  return undefined;
-};
-
-const getEnvFallback = (): ConfigResult | undefined => {
-  const envApiKey = process.env.ANTHROPIC_API_KEY;
-  if (envApiKey) {
-    return {
-      config: {
-        apiKey: envApiKey,
-        model: DEFAULT_MODEL,
-      },
-    };
-  }
-  return undefined;
-};
-
 /**
- * Resolve Anthropic configuration from multiple sources:
- * 1. opencode.json config files (project-level, then global)
- * 2. ANTHROPIC_API_KEY environment variable (fallback)
+ * Scan providers returned by the SDK for the first Anthropic model
+ * with `websearch: true` set in its options.
  */
-const getAnthropicConfig = (): ConfigResult => {
-  const errors: string[] = [];
-
-  const fromConfig = scanAllConfigFiles(errors);
-  if (fromConfig) {
-    return { config: fromConfig };
+const resolveFromProviders = (providers: ProviderData[]): AnthropicConfig | null => {
+  for (const provider of providers) {
+    for (const model of Object.values(provider.models)) {
+      if (isAnthropicModel(model) && hasWebSearch(model)) {
+        if (!provider.key) {
+          return null;
+        }
+        return {
+          apiKey: provider.key,
+          baseURL: extractBaseURL(provider.options),
+          model: model.id,
+        };
+      }
+    }
   }
-
-  const fromEnv = getEnvFallback();
-  if (fromEnv) {
-    return fromEnv;
-  }
-
-  if (errors.length > EMPTY_LENGTH) {
-    return { config: null, error: errors.join("\n") };
-  }
-  return { config: null };
+  return null;
 };
 
-const formatConfigError = (error?: string): string => {
-  let hint = "";
-  if (error) {
-    hint = `\n\n${error}`;
-  }
+// ── Error formatting ───────────────────────────────────────────────────
 
-  return `Error: web-search requires an Anthropic API key.
+const formatConfigError = (): string =>
+  `Error: web-search requires an Anthropic provider with \`websearch: true\` set on at least one model.
 
-Set the ANTHROPIC_API_KEY environment variable, or add an Anthropic provider to your opencode.json:
+No model with \`"websearch": true\` was found in your opencode.json configuration.
+
+To fix this, add an Anthropic provider to your opencode.json and set \`"websearch": true\` in the options of the model you want to use for web searches:
 
 {
   "provider": {
@@ -191,11 +67,20 @@ Set the ANTHROPIC_API_KEY environment variable, or add an Anthropic provider to 
         "apiKey": "{env:ANTHROPIC_API_KEY}"
       },
       "models": {
-        "claude-sonnet-4-5": { "name": "Claude Sonnet 4.5" }
+        "claude-sonnet-4-5": {
+          "options": {
+            "websearch": true
+          }
+        }
       }
     }
   }
-}${hint}`;
-};
+}
 
-export { formatConfigError, getAnthropicConfig };
+Steps:
+1. Open your opencode.json (project root, .opencode/opencode.json, or ~/.config/opencode/opencode.json)
+2. Ensure you have an Anthropic provider configured with a valid API key
+3. Add \`"websearch": true\` to the \`options\` of the Claude model you want to use for web search
+4. Restart OpenCode to pick up the configuration change`;
+
+export { formatConfigError, resolveFromProviders };
