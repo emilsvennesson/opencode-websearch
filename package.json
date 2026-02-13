@@ -18,9 +18,12 @@
     "build": "bun build src/index.ts --outdir dist --target node --format esm --packages external && bun run build:types",
     "build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
     "dev": "bun run --watch src/index.ts",
+    "format": "oxfmt src/",
+    "format:check": "oxfmt --check src/",
     "lint": "oxlint --tsconfig tsconfig.json src/",
+    "lint:fix": "oxlint --tsconfig tsconfig.json --fix src/",
     "typecheck": "tsc --noEmit",
-    "check": "bun run lint && bun run typecheck",
+    "check": "bun run format:check && bun run lint && bun run typecheck",
     "prepublishOnly": "bun run check && bun run build"
   },
   "keywords": [
@@ -44,6 +47,7 @@
   "devDependencies": {
     "@opencode-ai/plugin": "^1.1.65",
     "@types/bun": "latest",
+    "oxfmt": "^0.32.0",
     "oxlint": "^1.47.0",
     "typescript": "^5.8.0"
   },

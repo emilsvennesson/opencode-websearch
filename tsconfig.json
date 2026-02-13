@@ -13,8 +13,8 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "isolatedModules": true,
-    "verbatimModuleSyntax": true,
+    "isolatedModules": false,
+    "verbatimModuleSyntax": false,
     "lib": ["ESNext"],
     "types": ["bun"]
   },

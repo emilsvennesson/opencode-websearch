@@ -1,15 +1,18 @@
 # AGENTS.md
 
 OpenCode plugin that provides web search via Anthropic's server-side `web_search` API.
-Single-file TypeScript project built with Bun, linted with oxlint.
+Multi-file TypeScript project built with Bun, linted with oxlint.
 
 ## Commands
 
 ```sh
 bun install          # install dependencies
+bun run format       # oxfmt (auto-format source files in place)
+bun run format:check # oxfmt --check (verify formatting, no changes)
 bun run lint         # oxlint (with tsconfig, unicorn/typescript/import/oxc plugins)
+bun run lint:fix     # oxlint --fix (auto-fix lint issues)
 bun run typecheck    # tsc --noEmit
-bun run check        # lint + typecheck (the full quality gate)
+bun run check        # format:check + lint + typecheck (the full quality gate)
 bun run build        # bun build (ESM bundle) + tsc (declaration files) → dist/
 ```
 
@@ -18,11 +21,18 @@ There are no tests yet. When adding tests, use `bun:test` (built into Bun).
 ## Project structure
 
 ```
-src/index.ts      # entire plugin implementation (single file)
-dist/             # build output (gitignored)
-.oxlintrc.json    # oxlint configuration
-tsconfig.json     # TypeScript config (strict, ESNext, verbatimModuleSyntax)
-package.json      # Bun-based project, ESM module
+src/
+  index.ts              # plugin entry point — exports the plugin, wires tools
+  types.ts              # shared types (config, Anthropic response shapes)
+  constants.ts          # shared UPPER_SNAKE_CASE constants
+  helpers.ts            # generic utilities (date, env vars, URL normalization)
+  config.ts             # config resolution (opencode.json, env fallback)
+  providers/
+    anthropic.ts        # Anthropic web search (client, execution, response formatting)
+dist/                   # build output (gitignored)
+.oxlintrc.json          # oxlint configuration
+tsconfig.json           # TypeScript config (strict, ESNext)
+package.json            # Bun-based project, ESM module
 ```
 
 ## Code style
@@ -51,14 +61,11 @@ package.json      # Bun-based project, ESM module
 
 ### Imports
 
-- `verbatimModuleSyntax` is on: type-only imports **must** use `import type` on
-  a separate line, not inline `import { type Foo }`.
+- Plain `import { Foo }` for everything (types included). No `import type`.
 - Use `node:` prefix for Node.js builtins (`node:fs`, `node:os`, `node:path`).
-- Sort imports: named/multiple imports (`{ ... }`) before default imports.
-  Alphabetize members within an import (`{ existsSync, readFileSync }`).
-- Do not duplicate import sources. If the linter rules conflict (e.g. separate
-  `import type` from the same module), use an `oxlint-disable-next-line` comment
-  with an explanation.
+- Imports are sorted by `sort-imports` rule: multiline `{ ... }` blocks first,
+  then single-line, alphabetical by first member name within each group.
+- Alphabetize members within an import (`{ existsSync, readFileSync }`).
 
 ### Control flow
 
@@ -86,7 +93,8 @@ package.json      # Bun-based project, ESM module
 
 ### Exports
 
-- Single `export default` at the bottom of the file.
+- `src/index.ts` uses a single `export default` — the plugin entry point.
+- Internal modules use a grouped `export { ... }` at the end of the file.
 - The plugin export is an async arrow function returning the hooks/tools object,
   typed with `satisfies Plugin`.
 
@@ -122,9 +130,12 @@ Disabled rules (with rationale):
 - `unicorn/prevent-abbreviations` -- short names like `ctx`, `env`, `url` are clear
 - `unicorn/prefer-ternary` -- conflicts with `no-ternary`
 - `import/no-nodejs-modules` -- this is a Node.js plugin; fs/os/path are required
+- `import/no-named-export` -- internal modules use named exports
+- `import/consistent-type-specifier-style` -- no `import type` used
+- `typescript/consistent-type-imports` -- no `import type` used
 
 ## Dependencies
 
 - **Runtime:** `@anthropic-ai/sdk` -- Anthropic API client
 - **Peer:** `@opencode-ai/plugin` -- OpenCode plugin SDK (provides `Plugin` type and `tool` helper)
-- **Dev:** `oxlint`, `typescript`, `@types/bun`
+- **Dev:** `oxfmt`, `oxlint`, `typescript`, `@types/bun`
