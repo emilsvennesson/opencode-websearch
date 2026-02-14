@@ -1,6 +1,6 @@
 # AGENTS.md
 
-OpenCode plugin that provides web search via server-side web search APIs.
+OpenCode plugin that provides web search via provider web search APIs.
 Supports multiple providers (Anthropic, OpenAI). Multi-file TypeScript project built with Bun, linted with oxlint.
 
 ## Commands

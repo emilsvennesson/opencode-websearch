@@ -1,7 +1,7 @@
 {
   "name": "opencode-websearch",
   "version": "0.3.0",
-  "description": "Web search plugin for OpenCode using server-side web search APIs",
+  "description": "Web search plugin for OpenCode",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

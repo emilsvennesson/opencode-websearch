@@ -1,6 +1,6 @@
 # opencode-websearch
 
-Web search plugin for [OpenCode](https://opencode.ai), inspired by Claude Code's built-in web search. Gives any OpenCode model access to real-time web results with source citations using server-side web search tools.
+Web search plugin for [OpenCode](https://opencode.ai), inspired by Claude Code's built-in web search. Gives any OpenCode model access to real-time web results with source citations.
 
 ## Supported providers
 
@@ -21,15 +21,13 @@ Add the plugin to your `opencode.json`:
 
 OpenCode will install it automatically at startup.
 
-## Configuration
+## Configuration (optional)
 
-The plugin scans your OpenCode providers for any that use a supported SDK package and picks up credentials however you've configured them -- via `/connect`, environment variables, or `options.apiKey` in your config.
-
-Tag a model with `"websearch": "auto"` or `"websearch": "always"` to control how web search selects its model.
+No configuration is needed if your active chat model belongs to a supported provider. To customize which model handles web searches, tag a model with `"websearch": "auto"` or `"websearch": "always"`.
 
 ### Model selection
 
-The plugin dynamically chooses which model to use for each search:
+The plugin chooses which model to use for each search:
 
 | Priority | Condition                                    | Behavior                                                                   |
 | -------- | -------------------------------------------- | -------------------------------------------------------------------------- |
@@ -60,41 +58,16 @@ Use `"auto"` when you want web search to work seamlessly regardless of your acti
 
 ### `"always"` mode
 
-Use `"always"` to hard-lock web search to a specific model. This is useful when you want a cheaper or faster model to always handle searches, no matter what you're chatting with.
+Use `"always"` to lock web search to a specific model, regardless of what you're chatting with.
 
 ```json
 {
   "provider": {
     "openai": {
       "models": {
-        "gpt-4o-mini": {
+        "gpt-5.2": {
           "options": {
             "websearch": "always"
-          }
-        }
-      }
-    }
-  }
-}
-```
-
-### Custom providers
-
-This also works with custom providers that use a supported SDK package, such as a LiteLLM proxy:
-
-```json
-{
-  "provider": {
-    "my-proxy": {
-      "npm": "@ai-sdk/anthropic",
-      "options": {
-        "baseURL": "http://localhost:4000/v1/",
-        "apiKey": "{env:MY_API_KEY}"
-      },
-      "models": {
-        "claude-sonnet-4-5": {
-          "options": {
-            "websearch": "auto"
           }
         }
       }
