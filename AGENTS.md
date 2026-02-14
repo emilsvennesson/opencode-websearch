@@ -40,9 +40,9 @@ package.json            # Bun-based project, ESM module
 ### Functions
 
 - Use **arrow functions** assigned to `const`. No `function` declarations.
-- Keep functions small: **10 statements max** per function (`max-statements` rule).
+- Keep functions small: **20 statements max** per function (`max-statements` rule).
   Break larger logic into focused helper functions.
-- **3 parameters max** per function (`max-params` rule). Group related params
+- **5 parameters max** per function (`max-params` rule). Group related params
   into a context/options interface when you need more.
 
 ### Variables and constants
@@ -109,14 +109,15 @@ package.json            # Bun-based project, ESM module
 
 oxlint with plugins: `unicorn`, `typescript`, `import`, `oxc`.
 
-| Category     | Level |
-|--------------|-------|
-| correctness  | error |
-| suspicious   | warn  |
-| perf         | warn  |
-| style        | warn  |
+| Category    | Level |
+| ----------- | ----- |
+| correctness | error |
+| suspicious  | warn  |
+| perf        | warn  |
+| style       | warn  |
 
 Key rules that shape the code:
+
 - `no-magic-numbers`, `max-statements` (10), `max-params` (3)
 - `no-continue`, `no-ternary`, `curly`, `sort-keys`, `sort-imports`
 - `func-style` (expressions only), `init-declarations`, `id-length` (min 2)
@@ -124,6 +125,7 @@ Key rules that shape the code:
 - `typescript/no-unused-vars` (error)
 
 Disabled rules (with rationale):
+
 - `unicorn/no-null` -- null is used intentionally alongside undefined
 - `unicorn/prefer-top-level-await` -- plugin is a function export, not a script
 - `unicorn/filename-case` -- PascalCase not enforced on filenames
