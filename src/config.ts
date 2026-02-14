@@ -55,26 +55,33 @@ interface ScanResult {
   lockedModel?: string;
 }
 
-const scanProviderModels = (provider: ProviderData, accumulated: ScanResult): void => {
-  for (const model of Object.values(provider.models)) {
-    if (!isAnthropicProvider(model)) {
-      return;
-    }
+const processProviderModel = (
+  provider: ProviderData,
+  model: { api: { npm: string }; id: string; options: Record<string, unknown> },
+  accumulated: ScanResult,
+): void => {
+  if (!isAnthropicProvider(model)) {
+    return;
+  }
 
-    if (!accumulated.credentials) {
-      accumulated.credentials = extractCredentials(provider);
-    }
+  if (!accumulated.credentials) {
+    accumulated.credentials = extractCredentials(provider);
+  }
 
-    const option = getWebsearchOption(model);
-    if (option === WEBSEARCH_ALWAYS && !accumulated.lockedModel) {
-      accumulated.lockedModel = model.id;
-    }
-    if (option === WEBSEARCH_AUTO && !accumulated.fallbackModel) {
-      accumulated.fallbackModel = model.id;
-    }
+  const option = getWebsearchOption(model);
+  if (option === WEBSEARCH_ALWAYS && !accumulated.lockedModel) {
+    accumulated.lockedModel = model.id;
+  }
+  if (option === WEBSEARCH_AUTO && !accumulated.fallbackModel) {
+    accumulated.fallbackModel = model.id;
   }
 };
 
+const scanProviderModels = (provider: ProviderData, accumulated: ScanResult): void => {
+  for (const model of Object.values(provider.models)) {
+    processProviderModel(provider, model, accumulated);
+  }
+};
 /**
  * Scan providers for Anthropic credentials and any websearch-tagged models.
  *
