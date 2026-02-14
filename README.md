@@ -1,6 +1,6 @@
 # opencode-websearch
 
-Web search plugin for [OpenCode](https://opencode.ai), powered by Anthropic's server-side `web_search` API. A port of the Claude Code WebSearch tool to OpenCode.
+Web search plugin for [OpenCode](https://opencode.ai), powered by Anthropic's server-side [`web_search` tool](https://docs.anthropic.com/en/docs/build-with-claude/tool-use/web-search-tool). Gives any OpenCode model access to real-time web results with source citations -- the same web search capability available in Claude Code, brought to OpenCode.
 
 ## Install
 
@@ -16,9 +16,24 @@ OpenCode will install it automatically at startup.
 
 ## Configuration
 
-The plugin looks for an Anthropic provider (`@ai-sdk/anthropic`) with `"websearch": true` set on at least one model. It picks up credentials however you've configured them in OpenCode -- via `/connect`, environment variables, or `options.apiKey` in your config.
+The plugin scans your OpenCode providers for any that use `@ai-sdk/anthropic` and picks up credentials however you've configured them -- via `/connect`, environment variables, or `options.apiKey` in your config.
 
-Add `"websearch": true` to the model you want the plugin to use for searches:
+Tag a model with `"websearch": "auto"` or `"websearch": "always"` to control how web search selects its model.
+
+### Model selection
+
+The plugin dynamically chooses which Anthropic model to use for each search, following this priority chain:
+
+| Priority | Condition                           | Behavior                                                                    |
+| -------- | ----------------------------------- | --------------------------------------------------------------------------- |
+| 1        | A model is tagged `"always"`        | That model is **always** used, regardless of what you're chatting with      |
+| 2        | Your active chat model is Anthropic | The active model is used directly -- no extra configuration needed          |
+| 3        | A model is tagged `"auto"`          | That model is used as a **fallback** when the active model is non-Anthropic |
+| 4        | None of the above                   | An error is returned                                                        |
+
+### `"auto"` mode (recommended)
+
+Use `"auto"` when you want web search to work seamlessly whether you're chatting with an Anthropic model or not. When your active model is Anthropic, it's used directly; otherwise the tagged model kicks in as a fallback.
 
 ```json
 {
@@ -27,7 +42,7 @@ Add `"websearch": true` to the model you want the plugin to use for searches:
       "models": {
         "claude-sonnet-4-5": {
           "options": {
-            "websearch": true
+            "websearch": "auto"
           }
         }
       }
@@ -35,6 +50,28 @@ Add `"websearch": true` to the model you want the plugin to use for searches:
   }
 }
 ```
+
+### `"always"` mode
+
+Use `"always"` to hard-lock web search to a specific model. This is useful when you want a cheaper or faster model to always handle searches, no matter what you're chatting with.
+
+```json
+{
+  "provider": {
+    "anthropic": {
+      "models": {
+        "claude-haiku-3-5": {
+          "options": {
+            "websearch": "always"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+### Custom providers
 
 This also works with custom providers that use `@ai-sdk/anthropic`, such as a LiteLLM proxy:
 
@@ -50,7 +87,7 @@ This also works with custom providers that use `@ai-sdk/anthropic`, such as a Li
       "models": {
         "claude-sonnet-4-5": {
           "options": {
-            "websearch": true
+            "websearch": "auto"
           }
         }
       }
@@ -58,21 +95,6 @@ This also works with custom providers that use `@ai-sdk/anthropic`, such as a Li
   }
 }
 ```
-
-## Usage
-
-Once configured, the `web-search` tool is available to the AI agent. It accepts:
-
-| Argument | Type | Required | Description |
-|---|---|---|---|
-| `query` | `string` | Yes | The search query |
-| `allowed_domains` | `string[]` | No | Restrict results to these domains |
-| `blocked_domains` | `string[]` | No | Exclude results from these domains |
-| `max_uses` | `number` (1-10) | No | Max searches per invocation (default: 5) |
-
-You cannot specify both `allowed_domains` and `blocked_domains` at the same time.
-
-Results are returned as formatted markdown with source links.
 
 ## Development
 
