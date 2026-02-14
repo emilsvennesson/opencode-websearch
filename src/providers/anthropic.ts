@@ -1,52 +1,58 @@
 import Anthropic, { APIError } from "@anthropic-ai/sdk";
+import { AnthropicConfig, ContentBlock, WebSearchResult } from "../types.js";
 import {
-  AnthropicConfig,
-  ContentBlock,
-  SearchUsage,
-  WebSearchResult,
-  WebSearchToolResult,
-} from "../types.js";
-import { DEFAULT_SEARCH_USES, EMPTY_LENGTH, MAX_RESPONSE_TOKENS } from "../constants.js";
+  DEFAULT_SEARCH_USES,
+  EMPTY_LENGTH,
+  MAX_RESPONSE_TOKENS,
+  SEARCH_SYSTEM_PROMPT,
+} from "../constants.js";
 
-// ── Response formatting ────────────────────────────────────────────────
+// ── Structured result types ─────────────────────────────────────────────
 
-const formatSearchResult = (result: WebSearchResult): string => {
-  if (result.page_age) {
-    return `- [${result.title}](${result.url}) (Updated: ${result.page_age})`;
-  }
-  return `- [${result.title}](${result.url})`;
-};
+interface SearchHit {
+  title: string;
+  url: string;
+}
 
-const processSearchToolResult = (block: WebSearchToolResult, results: string[]): void => {
-  if (Array.isArray(block.content)) {
-    const searchResults = block.content as WebSearchResult[];
-    if (searchResults.length === EMPTY_LENGTH) {
-      results.push("No results found.");
-    } else {
-      results.push(`\nFound ${searchResults.length} results:\n`);
-      for (const result of searchResults) {
-        results.push(formatSearchResult(result));
-      }
-    }
-  } else if (block.content?.type === "web_search_tool_result_error") {
-    results.push(`Search error: ${block.content.error_code}`);
-  }
-};
+interface StructuredSearchResponse {
+  query: string;
+  results: (SearchHit[] | string)[];
+}
 
-const processBlock = (block: ContentBlock, results: string[]): void => {
-  if (block.type === "server_tool_use" && block.name === "web_search") {
-    results.push(`Search query: "${block.input.query}"`);
-    return;
+// ── Response processing ─────────────────────────────────────────────────
+
+const processBlock = (block: ContentBlock): SearchHit[] | string | null => {
+  if (block.type === "text" && block.text.trim().length > EMPTY_LENGTH) {
+    return block.text.trim();
   }
 
   if (block.type === "web_search_tool_result") {
-    processSearchToolResult(block, results);
-    return;
+    if (!Array.isArray(block.content)) {
+      return `Web search error: ${block.content.error_code}`;
+    }
+    return (block.content as WebSearchResult[]).map((sr) => ({
+      title: sr.title,
+      url: sr.url,
+    }));
   }
 
-  if (block.type === "text" && block.text) {
-    results.push(`\n${block.text}`);
+  return null;
+};
+
+const processResponseBlocks = (
+  query: string,
+  content: ContentBlock[],
+): StructuredSearchResponse => {
+  const results: (SearchHit[] | string)[] = [];
+
+  for (const block of content) {
+    const result = processBlock(block);
+    if (result !== null) {
+      results.push(result);
+    }
   }
+
+  return { query, results };
 };
 
 // ── Search tool construction ───────────────────────────────────────────
@@ -54,10 +60,9 @@ const processBlock = (block: ContentBlock, results: string[]): void => {
 const buildWebSearchTool = (args: {
   allowed_domains?: string[];
   blocked_domains?: string[];
-  max_uses?: number;
 }): Record<string, unknown> => {
   const searchTool: Record<string, unknown> = {
-    max_uses: args.max_uses ?? DEFAULT_SEARCH_USES,
+    max_uses: DEFAULT_SEARCH_USES,
     name: "web_search",
     type: "web_search_20250305",
   };
@@ -96,18 +101,11 @@ const createAnthropicClient = (config: AnthropicConfig): Anthropic => {
   return new Anthropic(options);
 };
 
-const appendUsageInfo = (usage: SearchUsage, results: string[]): void => {
-  if (usage.server_tool_use?.web_search_requests) {
-    results.push(`\n---\nSearches performed: ${usage.server_tool_use.web_search_requests}`);
-  }
-};
-
 const executeSearch = async (
   config: AnthropicConfig,
   args: {
     allowed_domains?: string[];
     blocked_domains?: string[];
-    max_uses?: number;
     query: string;
   },
 ): Promise<string> => {
@@ -118,24 +116,19 @@ const executeSearch = async (
     max_tokens: MAX_RESPONSE_TOKENS,
     messages: [
       {
-        content: `Perform a web search for: ${args.query}`,
+        content: `Perform a web search for the query: ${args.query}`,
         role: "user",
       },
     ],
     model: config.model,
+    system: SEARCH_SYSTEM_PROMPT,
     tools: [webSearchTool as unknown as Anthropic.Tool],
   });
 
-  const results: string[] = [];
   const content = response.content as ContentBlock[];
+  const structured = processResponseBlocks(args.query, content);
 
-  for (const block of content) {
-    processBlock(block, results);
-  }
-
-  appendUsageInfo(response.usage as SearchUsage, results);
-
-  return results.join("\n") || "No results returned from web search.";
+  return JSON.stringify(structured);
 };
 
 export { executeSearch, formatErrorMessage };
