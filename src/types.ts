@@ -22,7 +22,7 @@ interface SearchConfig {
 /**
  * The result of scanning all providers at startup:
  * - `credentials`: API key + optional base URL from the first Anthropic provider
- * - `lockedModel`: model ID if a model has `websearchModel: true` (hard lock)
+ * - `lockedModel`: model ID if a model has `websearch: "always"` (hard lock)
  * - `fallbackModel`: model ID if a model has `websearch: true` (soft fallback)
  */
 interface ProviderResolution {
