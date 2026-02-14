@@ -1,6 +1,6 @@
 # opencode-websearch
 
-Web search plugin for [OpenCode](https://opencode.ai). Gives any OpenCode model access to real-time web results with source citations using server-side web search tools.
+Web search plugin for [OpenCode](https://opencode.ai), inspired by Claude Code's built-in web search. Gives any OpenCode model access to real-time web results with source citations using server-side web search tools.
 
 ## Supported providers
 
