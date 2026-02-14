@@ -18,7 +18,7 @@ const isAnthropicProvider = (model: { api: { npm: string } }): boolean =>
 const getWebsearchOption = (model: { options: Record<string, unknown> }): string | null => {
   const value = model.options.websearch;
   if (value === WEBSEARCH_ALWAYS || value === WEBSEARCH_AUTO) {
-    return value as string;
+    return value;
   }
   return null;
 };
