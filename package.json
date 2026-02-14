@@ -1,7 +1,7 @@
 {
   "name": "opencode-websearch",
   "version": "0.3.0",
-  "description": "Web search plugin for OpenCode, inspired by Claude Code's WebSearch tool",
+  "description": "Web search plugin for OpenCode using server-side web search APIs",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -31,6 +31,7 @@
     "opencode-plugin",
     "web-search",
     "anthropic",
+    "openai",
     "ai"
   ],
   "repository": {

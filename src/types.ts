@@ -66,6 +66,26 @@ interface SearchArgs {
   query: string;
 }
 
+// ── Structured Result Types ────────────────────────────────────────────
+
+/**
+ * A single search result hit with a title and URL.
+ * Used by both Anthropic and OpenAI providers.
+ */
+interface SearchHit {
+  title: string;
+  url: string;
+}
+
+/**
+ * Structured response returned by a web search execution.
+ * Contains the original query and an array of results (text or citation hits).
+ */
+interface StructuredSearchResponse {
+  query: string;
+  results: (SearchHit[] | string)[];
+}
+
 export {
   ActiveModel,
   ProviderCredentials,
@@ -74,4 +94,6 @@ export {
   ProviderType,
   SearchArgs,
   SearchConfig,
+  SearchHit,
+  StructuredSearchResponse,
 };

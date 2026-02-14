@@ -1,6 +1,6 @@
 import Anthropic, { APIError } from "@anthropic-ai/sdk";
 import { EMPTY_LENGTH, MAX_RESPONSE_TOKENS, SEARCH_SYSTEM_PROMPT } from "../constants.js";
-import { SearchArgs, SearchConfig } from "../types.js";
+import { SearchArgs, SearchConfig, SearchHit, StructuredSearchResponse } from "../types.js";
 
 // ── Anthropic-specific types ────────────────────────────────────────────
 
@@ -28,18 +28,6 @@ type ContentBlock = { text: string; type: "text" } | ServerToolUse | WebSearchTo
 // ── Constants ──────────────────────────────────────────────────────────
 
 const DEFAULT_SEARCH_USES = 8;
-
-// ── Structured result types ─────────────────────────────────────────────
-
-interface SearchHit {
-  title: string;
-  url: string;
-}
-
-interface StructuredSearchResponse {
-  query: string;
-  results: (SearchHit[] | string)[];
-}
 
 // ── Response processing ─────────────────────────────────────────────────
 

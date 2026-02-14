@@ -5,19 +5,7 @@ import {
   ResponseOutputMessage,
   ResponseOutputText,
 } from "openai/resources/responses/responses";
-import { SearchArgs, SearchConfig } from "../types.js";
-
-// ── Structured result types ─────────────────────────────────────────────
-
-interface SearchHit {
-  title: string;
-  url: string;
-}
-
-interface StructuredSearchResponse {
-  query: string;
-  results: (SearchHit[] | string)[];
-}
+import { SearchArgs, SearchConfig, SearchHit, StructuredSearchResponse } from "../types.js";
 
 // ── Response processing ─────────────────────────────────────────────────
 
