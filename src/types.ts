@@ -9,7 +9,6 @@ interface AnthropicConfig {
 // ── Anthropic Response Types ───────────────────────────────────────────
 
 interface WebSearchResult {
-  page_age?: string;
   title: string;
   type: "web_search_result";
   url: string;
@@ -28,19 +27,6 @@ interface ServerToolUse {
   type: "server_tool_use";
 }
 
-interface SearchUsage {
-  input_tokens: number;
-  output_tokens: number;
-  server_tool_use?: { web_search_requests?: number };
-}
-
 type ContentBlock = { text: string; type: "text" } | ServerToolUse | WebSearchToolResult;
 
-export {
-  AnthropicConfig,
-  ContentBlock,
-  SearchUsage,
-  ServerToolUse,
-  WebSearchResult,
-  WebSearchToolResult,
-};
+export { AnthropicConfig, ContentBlock, ServerToolUse, WebSearchResult, WebSearchToolResult };

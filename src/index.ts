@@ -1,8 +1,8 @@
-import { MAX_SEARCH_USES, MIN_QUERY_LENGTH, MIN_SEARCH_USES } from "./constants.js";
 import { Plugin, tool } from "@opencode-ai/plugin";
 import { ProviderData, formatConfigError, resolveFromProviders } from "./config.js";
 import { executeSearch, formatErrorMessage } from "./providers/anthropic.js";
 import { AnthropicConfig } from "./types.js";
+import { MIN_QUERY_LENGTH } from "./constants.js";
 import { getCurrentMonthYear } from "./helpers.js";
 
 // ── Config resolution (lazy) ───────────────────────────────────────────
@@ -35,18 +35,12 @@ export default (async (input) => {
           allowed_domains: tool.schema
             .array(tool.schema.string())
             .optional()
-            .describe("Only include results from these domains"),
+            .describe("Only include search results from these domains"),
           blocked_domains: tool.schema
             .array(tool.schema.string())
             .optional()
-            .describe("Exclude results from these domains"),
-          max_uses: tool.schema
-            .number()
-            .min(MIN_SEARCH_USES)
-            .max(MAX_SEARCH_USES)
-            .optional()
-            .describe("Maximum number of searches to perform (default: 5)"),
-          query: tool.schema.string().min(MIN_QUERY_LENGTH).describe("The search query to execute"),
+            .describe("Never include search results from these domains"),
+          query: tool.schema.string().min(MIN_QUERY_LENGTH).describe("The search query to use"),
         },
         description: `- Allows OpenCode to search the web and use the results to inform responses
 - Provides up-to-date information for current events and recent data
