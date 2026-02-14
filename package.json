@@ -37,9 +37,6 @@
     "type": "git",
     "url": "https://github.com/emilsvennesson/opencode-websearch.git"
   },
-  "engines": {
-    "node": ">=24"
-  },
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.52.0"
