@@ -8,6 +8,8 @@ const MIN_QUERY_LENGTH = 2;
 const MONTH_OFFSET = 1;
 const PAD_LENGTH = 2;
 const SEARCH_SYSTEM_PROMPT = "You are an assistant for performing a web search tool use";
+const WEBSEARCH_ALWAYS = "always";
+const WEBSEARCH_AUTO = "auto";
 
 export {
   ANTHROPIC_NPM_PACKAGE,
@@ -18,4 +20,6 @@ export {
   MONTH_OFFSET,
   PAD_LENGTH,
   SEARCH_SYSTEM_PROMPT,
+  WEBSEARCH_ALWAYS,
+  WEBSEARCH_AUTO,
 };

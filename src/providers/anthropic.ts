@@ -1,5 +1,5 @@
 import Anthropic, { APIError } from "@anthropic-ai/sdk";
-import { AnthropicConfig, ContentBlock, WebSearchResult } from "../types.js";
+import { ContentBlock, SearchConfig, WebSearchResult } from "../types.js";
 import {
   DEFAULT_SEARCH_USES,
   EMPTY_LENGTH,
@@ -91,7 +91,7 @@ const formatErrorMessage = (error: unknown): string => {
 
 // ── Client and execution ───────────────────────────────────────────────
 
-const createAnthropicClient = (config: AnthropicConfig): Anthropic => {
+const createAnthropicClient = (config: SearchConfig): Anthropic => {
   const options: { apiKey: string; baseURL?: string } = {
     apiKey: config.apiKey,
   };
@@ -102,7 +102,7 @@ const createAnthropicClient = (config: AnthropicConfig): Anthropic => {
 };
 
 const executeSearch = async (
-  config: AnthropicConfig,
+  config: SearchConfig,
   args: {
     allowed_domains?: string[];
     blocked_domains?: string[];
