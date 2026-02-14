@@ -152,11 +152,10 @@ IMPORTANT - Use the correct year in search queries:
           }
 
           const active = activeModels.get(context.sessionID);
-          let effectiveActive: ActiveModel | undefined = undefined;
-          if (isAnthropicActive(active, state.list)) {
-            effectiveActive = active;
-          }
-          const modelID = resolveSearchModel(state.resolution, effectiveActive);
+          const modelID = resolveSearchModel(
+            state.resolution,
+            isAnthropicActive(active, state.list) ? active : undefined,
+          );
 
           if (!modelID) {
             return formatNonAnthropicError(active?.modelID ?? "unknown");
