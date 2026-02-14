@@ -1,67 +1,161 @@
-import { ANTHROPIC_NPM_PACKAGE, MIN_QUERY_LENGTH } from "./constants.js";
-import { ActiveModel, ProviderResolution, SearchConfig } from "./types.js";
+import { ANTHROPIC_NPM_PACKAGE, MIN_QUERY_LENGTH, OPENAI_NPM_PACKAGE } from "./constants.js";
+import {
+  ActiveModel,
+  ProviderResolution,
+  ProviderResolutionMap,
+  ProviderType,
+  SearchConfig,
+} from "./types.js";
 import { Plugin, tool } from "@opencode-ai/plugin";
 import {
   ProviderData,
   formatNoProviderError,
-  formatNonAnthropicError,
+  formatUnsupportedProviderError,
   resolveFromProviders,
 } from "./config.js";
-import { executeSearch, formatErrorMessage } from "./providers/anthropic.js";
+import {
+  executeSearch as executeAnthropicSearch,
+  formatErrorMessage as formatAnthropicError,
+} from "./providers/anthropic.js";
+import {
+  executeSearch as executeOpenAISearch,
+  formatErrorMessage as formatOpenAIError,
+} from "./providers/openai.js";
 
 import { getCurrentMonthYear } from "./helpers.js";
 
-// ── Model resolution ───────────────────────────────────────────────────
+// ── Provider detection ─────────────────────────────────────────────────
 
-/**
- * Determine the model to use for a web search call.
- *
- * Priority:
- * 1. Locked model (`"websearch": "always"`) — always wins
- * 2. Active model if it's Anthropic — use the model the user is chatting with
- * 3. Fallback model (`"websearch": "auto"`) — when the active model is non-Anthropic
- * 4. Error — active model is non-Anthropic and no fallback configured
- */
-const resolveSearchModel = (
-  resolution: ProviderResolution,
+const detectActiveProviderType = (
   active: ActiveModel | undefined,
-): string | null => {
-  if (resolution.lockedModel) {
-    return resolution.lockedModel;
+  providers: ProviderData[],
+): ProviderType | null => {
+  if (!active) {
+    return null;
   }
 
-  if (active) {
-    return active.modelID;
-  }
-
-  if (resolution.fallbackModel) {
-    return resolution.fallbackModel;
+  for (const provider of providers) {
+    for (const model of Object.values(provider.models)) {
+      if (model.id !== active.modelID) {
+        continue;
+      }
+      if (model.api.npm === ANTHROPIC_NPM_PACKAGE) {
+        return "anthropic";
+      }
+      if (model.api.npm === OPENAI_NPM_PACKAGE) {
+        return "openai";
+      }
+    }
   }
 
   return null;
 };
 
-const isAnthropicActive = (active: ActiveModel | undefined, providers: ProviderData[]): boolean => {
-  if (!active) {
-    return false;
+// ── Model resolution ───────────────────────────────────────────────────
+
+interface ResolvedProvider {
+  config: SearchConfig;
+  providerType: ProviderType;
+}
+
+const buildSearchConfig = (resolution: ProviderResolution, modelID: string): SearchConfig => ({
+  apiKey: resolution.credentials.apiKey,
+  baseURL: resolution.credentials.baseURL,
+  model: modelID,
+});
+
+/**
+ * Resolve the locked model for a given provider resolution.
+ * Returns a ResolvedProvider if a locked model is set, otherwise null.
+ */
+const resolveLockedModel = (resolutions: ProviderResolutionMap): ResolvedProvider | null => {
+  if (resolutions.anthropic?.lockedModel) {
+    return {
+      config: buildSearchConfig(resolutions.anthropic, resolutions.anthropic.lockedModel),
+      providerType: "anthropic",
+    };
+  }
+  if (resolutions.openai?.lockedModel) {
+    return {
+      config: buildSearchConfig(resolutions.openai, resolutions.openai.lockedModel),
+      providerType: "openai",
+    };
+  }
+  return null;
+};
+
+/**
+ * Resolve using the active model's provider directly.
+ */
+const resolveActiveModel = (
+  activeType: ProviderType,
+  active: ActiveModel,
+  resolutions: ProviderResolutionMap,
+): ResolvedProvider | null => {
+  const resolution = resolutions[activeType];
+  if (!resolution) {
+    return null;
   }
 
-  for (const provider of providers) {
-    for (const model of Object.values(provider.models)) {
-      if (model.id === active.modelID && model.api.npm === ANTHROPIC_NPM_PACKAGE) {
-        return true;
-      }
+  return {
+    config: buildSearchConfig(resolution, active.modelID),
+    providerType: activeType,
+  };
+};
+
+/**
+ * Resolve a fallback model from any provider with `"websearch": "auto"`.
+ */
+const resolveFallbackModel = (resolutions: ProviderResolutionMap): ResolvedProvider | null => {
+  if (resolutions.anthropic?.fallbackModel) {
+    return {
+      config: buildSearchConfig(resolutions.anthropic, resolutions.anthropic.fallbackModel),
+      providerType: "anthropic",
+    };
+  }
+  if (resolutions.openai?.fallbackModel) {
+    return {
+      config: buildSearchConfig(resolutions.openai, resolutions.openai.fallbackModel),
+      providerType: "openai",
+    };
+  }
+  return null;
+};
+
+/**
+ * Determine which provider and model to use for a web search call.
+ *
+ * Priority:
+ * 1. Locked model (`"websearch": "always"`) from any provider — always wins
+ * 2. Active model if it belongs to a supported provider — use directly
+ * 3. Fallback model (`"websearch": "auto"`) from any provider — when active is unsupported
+ * 4. null — no usable provider/model found
+ */
+const resolveSearchProvider = (
+  resolutions: ProviderResolutionMap,
+  active: ActiveModel | undefined,
+  activeType: ProviderType | null,
+): ResolvedProvider | null => {
+  const locked = resolveLockedModel(resolutions);
+  if (locked) {
+    return locked;
+  }
+
+  if (activeType && active) {
+    const resolved = resolveActiveModel(activeType, active, resolutions);
+    if (resolved) {
+      return resolved;
     }
   }
 
-  return false;
+  return resolveFallbackModel(resolutions);
 };
 
 // ── Lazy provider resolution ───────────────────────────────────────────
 
 interface ProviderState {
   list: ProviderData[];
-  resolution: ProviderResolution | null;
+  resolutions: ProviderResolutionMap;
 }
 
 const resolveProviderState = async (client: {
@@ -69,19 +163,31 @@ const resolveProviderState = async (client: {
 }): Promise<ProviderState> => {
   const { data } = await client.config.providers();
   if (!data) {
-    return { list: [], resolution: null };
+    return { list: [], resolutions: {} };
   }
   const list = data.providers as ProviderData[];
-  return { list, resolution: resolveFromProviders(list) };
+  return { list, resolutions: resolveFromProviders(list) };
 };
 
-// ── Search execution ───────────────────────────────────────────────────
+const hasAnyProvider = (resolutions: ProviderResolutionMap): boolean =>
+  resolutions.anthropic !== undefined || resolutions.openai !== undefined;
 
-const buildSearchConfig = (resolution: ProviderResolution, modelID: string): SearchConfig => ({
-  apiKey: resolution.credentials.apiKey,
-  baseURL: resolution.credentials.baseURL,
-  model: modelID,
-});
+// ── Search dispatch ────────────────────────────────────────────────────
+
+const dispatchSearch = async (resolved: ResolvedProvider, query: string): Promise<string> => {
+  const args = { query };
+  if (resolved.providerType === "anthropic") {
+    return executeAnthropicSearch(resolved.config, args);
+  }
+  return executeOpenAISearch(resolved.config, args);
+};
+
+const dispatchErrorMessage = (providerType: ProviderType, error: unknown): string => {
+  if (providerType === "anthropic") {
+    return formatAnthropicError(error);
+  }
+  return formatOpenAIError(error);
+};
 
 // ── Plugin ─────────────────────────────────────────────────────────────
 
@@ -103,14 +209,6 @@ export default (async (input) => {
     tool: {
       "web-search": tool({
         args: {
-          allowed_domains: tool.schema
-            .array(tool.schema.string())
-            .optional()
-            .describe("Only include search results from these domains"),
-          blocked_domains: tool.schema
-            .array(tool.schema.string())
-            .optional()
-            .describe("Never include search results from these domains"),
           query: tool.schema.string().min(MIN_QUERY_LENGTH).describe("The search query to use"),
         },
         description: `- Allows OpenCode to search the web and use the results to inform responses
@@ -132,7 +230,7 @@ CRITICAL REQUIREMENT - You MUST follow this:
     - [Source Title 2](https://example.com/2)
 
 Usage notes:
-  - Domain filtering is supported to include or block specific websites
+  - Supports Anthropic and OpenAI providers
 
 IMPORTANT - Use the correct year in search queries:
   - It is currently ${getCurrentMonthYear()}. You MUST use this when searching for recent information, documentation, or current events.
@@ -143,28 +241,23 @@ IMPORTANT - Use the correct year in search queries:
             state = await resolveProviderState(input.client);
           }
 
-          if (!state.resolution) {
+          if (!hasAnyProvider(state.resolutions)) {
             return formatNoProviderError();
           }
 
-          if (args.allowed_domains && args.blocked_domains) {
-            return "Error: Cannot specify both allowed_domains and blocked_domains.";
-          }
-
           const active = activeModels.get(context.sessionID);
-          const modelID = resolveSearchModel(
-            state.resolution,
-            isAnthropicActive(active, state.list) ? active : undefined,
-          );
+          const activeType = detectActiveProviderType(active, state.list);
 
-          if (!modelID) {
-            return formatNonAnthropicError(active?.modelID ?? "unknown");
+          const resolved = resolveSearchProvider(state.resolutions, active, activeType);
+
+          if (!resolved) {
+            return formatUnsupportedProviderError(active?.modelID ?? "unknown");
           }
 
           try {
-            return await executeSearch(buildSearchConfig(state.resolution, modelID), args);
+            return await dispatchSearch(resolved, args.query);
           } catch (error) {
-            return formatErrorMessage(error);
+            return dispatchErrorMessage(resolved.providerType, error);
           }
         },
       }),

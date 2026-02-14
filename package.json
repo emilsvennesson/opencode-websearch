@@ -1,7 +1,7 @@
 {
   "name": "opencode-websearch",
   "version": "0.3.0",
-  "description": "Web search plugin for OpenCode, inspired by Claude Code's WebSearch tool",
+  "description": "Web search plugin for OpenCode",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -31,6 +31,7 @@
     "opencode-plugin",
     "web-search",
     "anthropic",
+    "openai",
     "ai"
   ],
   "repository": {
@@ -39,7 +40,8 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.52.0"
+    "@anthropic-ai/sdk": "^0.52.0",
+    "openai": "^6.22.0"
   },
   "devDependencies": {
     "@opencode-ai/plugin": "^1.1.65",

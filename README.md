@@ -1,6 +1,13 @@
 # opencode-websearch
 
-Web search plugin for [OpenCode](https://opencode.ai), powered by Anthropic's server-side [`web_search` tool](https://docs.anthropic.com/en/docs/build-with-claude/tool-use/web-search-tool). Gives any OpenCode model access to real-time web results with source citations -- the same web search capability available in Claude Code, brought to OpenCode.
+Web search plugin for [OpenCode](https://opencode.ai), inspired by Claude Code's built-in web search. Gives any OpenCode model access to real-time web results with source citations.
+
+## Supported providers
+
+| Provider  | SDK package         | Search mechanism                                                                                   |
+| --------- | ------------------- | -------------------------------------------------------------------------------------------------- |
+| Anthropic | `@ai-sdk/anthropic` | [`web_search` tool](https://docs.anthropic.com/en/docs/build-with-claude/tool-use/web-search-tool) |
+| OpenAI    | `@ai-sdk/openai`    | [Responses API web search](https://platform.openai.com/docs/guides/tools-web-search)               |
 
 ## Install
 
@@ -14,26 +21,24 @@ Add the plugin to your `opencode.json`:
 
 OpenCode will install it automatically at startup.
 
-## Configuration
+## Configuration (optional)
 
-The plugin scans your OpenCode providers for any that use `@ai-sdk/anthropic` and picks up credentials however you've configured them -- via `/connect`, environment variables, or `options.apiKey` in your config.
-
-Tag a model with `"websearch": "auto"` or `"websearch": "always"` to control how web search selects its model.
+No configuration is needed if your active chat model belongs to a supported provider. To customize which model handles web searches, tag a model with `"websearch": "auto"` or `"websearch": "always"`.
 
 ### Model selection
 
-The plugin dynamically chooses which Anthropic model to use for each search, following this priority chain:
+The plugin chooses which model to use for each search:
 
-| Priority | Condition                           | Behavior                                                                    |
-| -------- | ----------------------------------- | --------------------------------------------------------------------------- |
-| 1        | A model is tagged `"always"`        | That model is **always** used, regardless of what you're chatting with      |
-| 2        | Your active chat model is Anthropic | The active model is used directly -- no extra configuration needed          |
-| 3        | A model is tagged `"auto"`          | That model is used as a **fallback** when the active model is non-Anthropic |
-| 4        | None of the above                   | An error is returned                                                        |
+| Priority | Condition                                      | Behavior                                                                  |
+| -------- | ---------------------------------------------- | ------------------------------------------------------------------------- |
+| 1        | A model is tagged `"always"`                   | That model is **always** used, regardless of what you're chatting with    |
+| 2        | Your active chat model is a supported provider | The active model is used directly -- no extra configuration needed        |
+| 3        | A model is tagged `"auto"`                     | That model is used as a **fallback** when the active model is unsupported |
+| 4        | None of the above                              | An error is returned                                                      |
 
 ### `"auto"` mode (recommended)
 
-Use `"auto"` when you want web search to work seamlessly whether you're chatting with an Anthropic model or not. When your active model is Anthropic, it's used directly; otherwise the tagged model kicks in as a fallback.
+Use `"auto"` when you want web search to work seamlessly regardless of your active model. When your active model belongs to a supported provider, it's used directly; otherwise the tagged model kicks in as a fallback.
 
 ```json
 {
@@ -53,41 +58,16 @@ Use `"auto"` when you want web search to work seamlessly whether you're chatting
 
 ### `"always"` mode
 
-Use `"always"` to hard-lock web search to a specific model. This is useful when you want a cheaper or faster model to always handle searches, no matter what you're chatting with.
+Use `"always"` to lock web search to a specific model, regardless of what you're chatting with.
 
 ```json
 {
   "provider": {
-    "anthropic": {
+    "openai": {
       "models": {
-        "claude-haiku-3-5": {
+        "gpt-5.2": {
           "options": {
             "websearch": "always"
-          }
-        }
-      }
-    }
-  }
-}
-```
-
-### Custom providers
-
-This also works with custom providers that use `@ai-sdk/anthropic`, such as a LiteLLM proxy:
-
-```json
-{
-  "provider": {
-    "my-anthropic": {
-      "npm": "@ai-sdk/anthropic",
-      "options": {
-        "baseURL": "http://localhost:4000/v1/",
-        "apiKey": "{env:MY_API_KEY}"
-      },
-      "models": {
-        "claude-sonnet-4-5": {
-          "options": {
-            "websearch": "auto"
           }
         }
       }

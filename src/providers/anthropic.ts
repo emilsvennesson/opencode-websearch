@@ -1,23 +1,33 @@
 import Anthropic, { APIError } from "@anthropic-ai/sdk";
-import { ContentBlock, SearchConfig, WebSearchResult } from "../types.js";
-import {
-  DEFAULT_SEARCH_USES,
-  EMPTY_LENGTH,
-  MAX_RESPONSE_TOKENS,
-  SEARCH_SYSTEM_PROMPT,
-} from "../constants.js";
+import { EMPTY_LENGTH, MAX_RESPONSE_TOKENS, SEARCH_SYSTEM_PROMPT } from "../constants.js";
+import { SearchArgs, SearchConfig, SearchHit, StructuredSearchResponse } from "../types.js";
 
-// ── Structured result types ─────────────────────────────────────────────
+// ── Anthropic-specific types ────────────────────────────────────────────
 
-interface SearchHit {
+interface WebSearchResult {
   title: string;
+  type: "web_search_result";
   url: string;
 }
 
-interface StructuredSearchResponse {
-  query: string;
-  results: (SearchHit[] | string)[];
+interface WebSearchToolResult {
+  content: WebSearchResult[] | { error_code: string; type: "web_search_tool_result_error" };
+  tool_use_id: string;
+  type: "web_search_tool_result";
 }
+
+interface ServerToolUse {
+  id: string;
+  input: { query: string };
+  name: string;
+  type: "server_tool_use";
+}
+
+type ContentBlock = { text: string; type: "text" } | ServerToolUse | WebSearchToolResult;
+
+// ── Constants ──────────────────────────────────────────────────────────
+
+const DEFAULT_SEARCH_USES = 8;
 
 // ── Response processing ─────────────────────────────────────────────────
 
@@ -57,25 +67,11 @@ const processResponseBlocks = (
 
 // ── Search tool construction ───────────────────────────────────────────
 
-const buildWebSearchTool = (args: {
-  allowed_domains?: string[];
-  blocked_domains?: string[];
-}): Record<string, unknown> => {
-  const searchTool: Record<string, unknown> = {
-    max_uses: DEFAULT_SEARCH_USES,
-    name: "web_search",
-    type: "web_search_20250305",
-  };
-
-  if (args.allowed_domains?.length) {
-    searchTool.allowed_domains = args.allowed_domains;
-  }
-  if (args.blocked_domains?.length) {
-    searchTool.blocked_domains = args.blocked_domains;
-  }
-
-  return searchTool;
-};
+const buildWebSearchTool = (): Record<string, unknown> => ({
+  max_uses: DEFAULT_SEARCH_USES,
+  name: "web_search",
+  type: "web_search_20250305",
+});
 
 // ── Error formatting ───────────────────────────────────────────────────
 
@@ -101,16 +97,9 @@ const createAnthropicClient = (config: SearchConfig): Anthropic => {
   return new Anthropic(options);
 };
 
-const executeSearch = async (
-  config: SearchConfig,
-  args: {
-    allowed_domains?: string[];
-    blocked_domains?: string[];
-    query: string;
-  },
-): Promise<string> => {
+const executeSearch = async (config: SearchConfig, args: SearchArgs): Promise<string> => {
   const client = createAnthropicClient(config);
-  const webSearchTool = buildWebSearchTool(args);
+  const webSearchTool = buildWebSearchTool();
 
   const response = await client.messages.create({
     max_tokens: MAX_RESPONSE_TOKENS,

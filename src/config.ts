@@ -1,5 +1,15 @@
-import { ANTHROPIC_NPM_PACKAGE, WEBSEARCH_ALWAYS, WEBSEARCH_AUTO } from "./constants.js";
-import { AnthropicCredentials, ProviderResolution } from "./types.js";
+import {
+  ANTHROPIC_NPM_PACKAGE,
+  OPENAI_NPM_PACKAGE,
+  WEBSEARCH_ALWAYS,
+  WEBSEARCH_AUTO,
+} from "./constants.js";
+import {
+  ProviderCredentials,
+  ProviderResolution,
+  ProviderResolutionMap,
+  ProviderType,
+} from "./types.js";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -14,6 +24,19 @@ interface ProviderData {
 
 const isAnthropicProvider = (model: { api: { npm: string } }): boolean =>
   model.api.npm === ANTHROPIC_NPM_PACKAGE;
+
+const isOpenAIProvider = (model: { api: { npm: string } }): boolean =>
+  model.api.npm === OPENAI_NPM_PACKAGE;
+
+const detectProviderType = (model: { api: { npm: string } }): ProviderType | null => {
+  if (isAnthropicProvider(model)) {
+    return "anthropic";
+  }
+  if (isOpenAIProvider(model)) {
+    return "openai";
+  }
+  return null;
+};
 
 const getWebsearchOption = (model: { options: Record<string, unknown> }): string | null => {
   const value = model.options.websearch;
@@ -32,40 +55,54 @@ const extractApiKey = (options: Record<string, unknown>): string | undefined => 
   return options.apiKey;
 };
 
-const extractBaseURL = (options: Record<string, unknown>): string | undefined => {
+const extractBaseURL = (options: Record<string, unknown>, pt: ProviderType): string | undefined => {
   if (typeof options.baseURL !== "string") {
     return undefined;
   }
-  return normalizeBaseURL(options.baseURL);
+  if (pt === "anthropic") {
+    return normalizeBaseURL(options.baseURL);
+  }
+  return options.baseURL;
 };
 
 // ── Config resolution ──────────────────────────────────────────────────
 
-const extractCredentials = (provider: ProviderData): AnthropicCredentials | null => {
+const extractCredentials = (
+  provider: ProviderData,
+  pt: ProviderType,
+): ProviderCredentials | null => {
   const apiKey = provider.key ?? extractApiKey(provider.options);
   if (!apiKey) {
     return null;
   }
-  return { apiKey, baseURL: extractBaseURL(provider.options) };
+  return { apiKey, baseURL: extractBaseURL(provider.options, pt) };
 };
 
 interface ScanResult {
-  credentials: AnthropicCredentials | null;
+  credentials: ProviderCredentials | null;
   fallbackModel?: string;
   lockedModel?: string;
+}
+
+interface ScanState {
+  anthropic: ScanResult;
+  openai: ScanResult;
 }
 
 const processProviderModel = (
   provider: ProviderData,
   model: { api: { npm: string }; id: string; options: Record<string, unknown> },
-  accumulated: ScanResult,
+  state: ScanState,
 ): void => {
-  if (!isAnthropicProvider(model)) {
+  const pt = detectProviderType(model);
+  if (!pt) {
     return;
   }
 
+  const accumulated = state[pt];
+
   if (!accumulated.credentials) {
-    accumulated.credentials = extractCredentials(provider);
+    accumulated.credentials = extractCredentials(provider, pt);
   }
 
   const option = getWebsearchOption(model);
@@ -77,47 +114,65 @@ const processProviderModel = (
   }
 };
 
-const scanProviderModels = (provider: ProviderData, accumulated: ScanResult): void => {
+const scanProviderModels = (provider: ProviderData, state: ScanState): void => {
   for (const model of Object.values(provider.models)) {
-    processProviderModel(provider, model, accumulated);
+    processProviderModel(provider, model, state);
   }
 };
-/**
- * Scan providers for Anthropic credentials and any websearch-tagged models.
- *
- * Resolution priority:
- * - `lockedModel`:   first model with `"websearch": "always"` (hard lock)
- * - `fallbackModel`: first model with `"websearch": "auto"`   (soft fallback)
- * - `credentials`:   API key + optional baseURL from the first Anthropic provider
- *
- * Returns `null` if no Anthropic provider with a valid API key is found.
- */
-const resolveFromProviders = (providers: ProviderData[]): ProviderResolution | null => {
-  const result: ScanResult = { credentials: null };
 
-  for (const provider of providers) {
-    scanProviderModels(provider, result);
-  }
-
-  if (!result.credentials) {
+const buildResolution = (scan: ScanResult, pt: ProviderType): ProviderResolution | null => {
+  if (!scan.credentials) {
     return null;
   }
-
   return {
-    credentials: result.credentials,
-    fallbackModel: result.fallbackModel,
-    lockedModel: result.lockedModel,
+    credentials: scan.credentials,
+    fallbackModel: scan.fallbackModel,
+    lockedModel: scan.lockedModel,
+    providerType: pt,
   };
+};
+
+/**
+ * Scan providers for Anthropic and OpenAI credentials and any websearch-tagged models.
+ *
+ * Resolution priority (per provider):
+ * - `lockedModel`:   first model with `"websearch": "always"` (hard lock)
+ * - `fallbackModel`: first model with `"websearch": "auto"`   (soft fallback)
+ * - `credentials`:   API key + optional baseURL from the first matching provider
+ *
+ * Returns a map with optional entries for each supported provider type.
+ */
+const resolveFromProviders = (providers: ProviderData[]): ProviderResolutionMap => {
+  const state: ScanState = {
+    anthropic: { credentials: null },
+    openai: { credentials: null },
+  };
+
+  for (const provider of providers) {
+    scanProviderModels(provider, state);
+  }
+
+  const result: ProviderResolutionMap = {};
+  const anthropic = buildResolution(state.anthropic, "anthropic");
+  if (anthropic) {
+    result.anthropic = anthropic;
+  }
+  const openai = buildResolution(state.openai, "openai");
+  if (openai) {
+    result.openai = openai;
+  }
+
+  return result;
 };
 
 // ── Error formatting ───────────────────────────────────────────────────
 
 const formatNoProviderError = (): string =>
-  `Error: web-search requires an Anthropic provider.
+  `Error: web-search requires an Anthropic or OpenAI provider.
 
-No Anthropic provider with a valid API key was found in your opencode.json configuration.
+No supported provider with a valid API key was found in your opencode.json configuration.
 
-To fix this, add an Anthropic provider to your opencode.json:
+To fix this, add an Anthropic or OpenAI provider to your opencode.json:
 
 {
   "provider": {
@@ -129,19 +184,31 @@ To fix this, add an Anthropic provider to your opencode.json:
   }
 }
 
+Or:
+
+{
+  "provider": {
+    "openai": {
+      "options": {
+        "apiKey": "{env:OPENAI_API_KEY}"
+      }
+    }
+  }
+}
+
 Steps:
 1. Open your opencode.json (project root, .opencode/, or ~/.config/opencode/)
-2. Ensure you have an Anthropic provider configured with a valid API key
+2. Ensure you have an Anthropic or OpenAI provider configured with a valid API key
 3. Restart OpenCode to pick up the configuration change`;
 
-const formatNonAnthropicError = (activeModelID: string): string =>
+const formatUnsupportedProviderError = (activeModelID: string): string =>
   `Error: your current model (${activeModelID}) does not support web search.
 
-Web search uses Anthropic's server-side web_search tool, which only works with Anthropic models.
+Web search requires an Anthropic or OpenAI model.
 
 You can either:
-1. Switch to an Anthropic model (e.g. claude-sonnet-4-5)
-2. Set \`"websearch": "auto"\` on an Anthropic model to use it as a fallback:
+1. Switch to a supported model (e.g. claude-sonnet-4-5 or gpt-4o)
+2. Set \`"websearch": "auto"\` on a supported model to use it as a fallback:
 
 {
   "provider": {
@@ -159,4 +226,9 @@ You can either:
 
 Or set \`"websearch": "always"\` to always use that model for web search regardless of your active model.`;
 
-export { formatNoProviderError, formatNonAnthropicError, ProviderData, resolveFromProviders };
+export {
+  formatNoProviderError,
+  formatUnsupportedProviderError,
+  ProviderData,
+  resolveFromProviders,
+};

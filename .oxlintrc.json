@@ -19,10 +19,12 @@
     "unicorn/prefer-ternary": "off",
     "import/no-nodejs-modules": "off",
     "import/no-named-export": "off",
+    "import/prefer-default-export": "off",
     "import/consistent-type-specifier-style": "off",
     "typescript/consistent-type-imports": "off",
     "max-statements": ["warn", { "max": 20 }],
-    "max-params": ["warn", { "max": 5 }]
+    "max-params": ["warn", { "max": 5 }],
+    "no-continue": "off"
   },
   "ignorePatterns": ["dist", "node_modules"]
 }

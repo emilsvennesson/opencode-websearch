@@ -1,7 +1,7 @@
 # AGENTS.md
 
-OpenCode plugin that provides web search via Anthropic's server-side `web_search` API.
-Multi-file TypeScript project built with Bun, linted with oxlint.
+OpenCode plugin that provides web search via provider web search APIs.
+Supports multiple providers (Anthropic, OpenAI). Multi-file TypeScript project built with Bun, linted with oxlint.
 
 ## Commands
 
@@ -23,12 +23,13 @@ There are no tests yet. When adding tests, use `bun:test` (built into Bun).
 ```
 src/
   index.ts              # plugin entry point — exports the plugin, wires tools
-  types.ts              # shared types (config, Anthropic response shapes)
+  types.ts              # shared types (config, provider resolution, search result shapes)
   constants.ts          # shared UPPER_SNAKE_CASE constants
-  helpers.ts            # generic utilities (date, env vars, URL normalization)
+  helpers.ts            # generic utilities (date formatting)
   config.ts             # config resolution (opencode.json, env fallback)
   providers/
     anthropic.ts        # Anthropic web search (client, execution, response formatting)
+    openai.ts           # OpenAI web search (client, execution, response formatting)
 dist/                   # build output (gitignored)
 .oxlintrc.json          # oxlint configuration
 tsconfig.json           # TypeScript config (strict, ESNext)
@@ -69,10 +70,9 @@ package.json            # Bun-based project, ESM module
 
 ### Control flow
 
-- **No `continue` statements.** Restructure loops to use early returns from
-  extracted helper functions instead.
 - **No ternary expressions.** Use `if`/`else` blocks.
 - Always use **braces** with `if`/`else`/`for`/`while` (enforced by `curly`).
+- Prefer `continue` in loops to skip irrelevant iterations and reduce nesting.
 
 ### Strings
 
@@ -118,8 +118,8 @@ oxlint with plugins: `unicorn`, `typescript`, `import`, `oxc`.
 
 Key rules that shape the code:
 
-- `no-magic-numbers`, `max-statements` (10), `max-params` (3)
-- `no-continue`, `no-ternary`, `curly`, `sort-keys`, `sort-imports`
+- `no-magic-numbers`, `max-statements` (20), `max-params` (5)
+- `no-ternary`, `curly`, `sort-keys`, `sort-imports`
 - `func-style` (expressions only), `init-declarations`, `id-length` (min 2)
 - `unicorn/catch-error-name`, `unicorn/text-encoding-identifier-case`
 - `typescript/no-unused-vars` (error)
@@ -130,14 +130,16 @@ Disabled rules (with rationale):
 - `unicorn/prefer-top-level-await` -- plugin is a function export, not a script
 - `unicorn/filename-case` -- PascalCase not enforced on filenames
 - `unicorn/prevent-abbreviations` -- short names like `ctx`, `env`, `url` are clear
+- `no-continue` -- `continue` is cleaner than empty if-branches or deep nesting in loops
 - `unicorn/prefer-ternary` -- conflicts with `no-ternary`
 - `import/no-nodejs-modules` -- this is a Node.js plugin; fs/os/path are required
 - `import/no-named-export` -- internal modules use named exports
+- `import/prefer-default-export` -- internal modules use named exports, not default
 - `import/consistent-type-specifier-style` -- no `import type` used
 - `typescript/consistent-type-imports` -- no `import type` used
 
 ## Dependencies
 
-- **Runtime:** `@anthropic-ai/sdk` -- Anthropic API client
+- **Runtime:** `@anthropic-ai/sdk` -- Anthropic API client, `openai` -- OpenAI API client
 - **Peer:** `@opencode-ai/plugin` -- OpenCode plugin SDK (provides `Plugin` type and `tool` helper)
 - **Dev:** `oxfmt`, `oxlint`, `typescript`, `@types/bun`
