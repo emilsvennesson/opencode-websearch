@@ -1,6 +1,6 @@
 {
   "name": "opencode-websearch",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Web search plugin for OpenCode, inspired by Claude Code's WebSearch tool",
   "type": "module",
   "main": "dist/index.js",
