@@ -37,10 +37,12 @@ const detectActiveProviderType = (
   for (const provider of providers) {
     for (const model of Object.values(provider.models)) {
       if (model.id !== active.modelID) {
-        // oxlint-disable-next-line no-empty -- skip non-matching models
-      } else if (model.api.npm === ANTHROPIC_NPM_PACKAGE) {
+        continue;
+      }
+      if (model.api.npm === ANTHROPIC_NPM_PACKAGE) {
         return "anthropic";
-      } else if (model.api.npm === OPENAI_NPM_PACKAGE) {
+      }
+      if (model.api.npm === OPENAI_NPM_PACKAGE) {
         return "openai";
       }
     }

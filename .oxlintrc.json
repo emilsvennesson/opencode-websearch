@@ -23,7 +23,8 @@
     "import/consistent-type-specifier-style": "off",
     "typescript/consistent-type-imports": "off",
     "max-statements": ["warn", { "max": 20 }],
-    "max-params": ["warn", { "max": 5 }]
+    "max-params": ["warn", { "max": 5 }],
+    "no-continue": "off"
   },
   "ignorePatterns": ["dist", "node_modules"]
 }

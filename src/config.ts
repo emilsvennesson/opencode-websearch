@@ -55,21 +55,27 @@ const extractApiKey = (options: Record<string, unknown>): string | undefined => 
   return options.apiKey;
 };
 
-const extractBaseURL = (options: Record<string, unknown>): string | undefined => {
+const extractBaseURL = (options: Record<string, unknown>, pt: ProviderType): string | undefined => {
   if (typeof options.baseURL !== "string") {
     return undefined;
   }
-  return normalizeBaseURL(options.baseURL);
+  if (pt === "anthropic") {
+    return normalizeBaseURL(options.baseURL);
+  }
+  return options.baseURL;
 };
 
 // ── Config resolution ──────────────────────────────────────────────────
 
-const extractCredentials = (provider: ProviderData): ProviderCredentials | null => {
+const extractCredentials = (
+  provider: ProviderData,
+  pt: ProviderType,
+): ProviderCredentials | null => {
   const apiKey = provider.key ?? extractApiKey(provider.options);
   if (!apiKey) {
     return null;
   }
-  return { apiKey, baseURL: extractBaseURL(provider.options) };
+  return { apiKey, baseURL: extractBaseURL(provider.options, pt) };
 };
 
 interface ScanResult {
@@ -96,7 +102,7 @@ const processProviderModel = (
   const accumulated = state[pt];
 
   if (!accumulated.credentials) {
-    accumulated.credentials = extractCredentials(provider);
+    accumulated.credentials = extractCredentials(provider, pt);
   }
 
   const option = getWebsearchOption(model);

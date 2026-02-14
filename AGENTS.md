@@ -70,10 +70,9 @@ package.json            # Bun-based project, ESM module
 
 ### Control flow
 
-- **No `continue` statements.** Restructure loops to use early returns from
-  extracted helper functions instead.
 - **No ternary expressions.** Use `if`/`else` blocks.
 - Always use **braces** with `if`/`else`/`for`/`while` (enforced by `curly`).
+- Prefer `continue` in loops to skip irrelevant iterations and reduce nesting.
 
 ### Strings
 
@@ -120,7 +119,7 @@ oxlint with plugins: `unicorn`, `typescript`, `import`, `oxc`.
 Key rules that shape the code:
 
 - `no-magic-numbers`, `max-statements` (20), `max-params` (5)
-- `no-continue`, `no-ternary`, `curly`, `sort-keys`, `sort-imports`
+- `no-ternary`, `curly`, `sort-keys`, `sort-imports`
 - `func-style` (expressions only), `init-declarations`, `id-length` (min 2)
 - `unicorn/catch-error-name`, `unicorn/text-encoding-identifier-case`
 - `typescript/no-unused-vars` (error)
@@ -131,6 +130,7 @@ Disabled rules (with rationale):
 - `unicorn/prefer-top-level-await` -- plugin is a function export, not a script
 - `unicorn/filename-case` -- PascalCase not enforced on filenames
 - `unicorn/prevent-abbreviations` -- short names like `ctx`, `env`, `url` are clear
+- `no-continue` -- `continue` is cleaner than empty if-branches or deep nesting in loops
 - `unicorn/prefer-ternary` -- conflicts with `no-ternary`
 - `import/no-nodejs-modules` -- this is a Node.js plugin; fs/os/path are required
 - `import/no-named-export` -- internal modules use named exports

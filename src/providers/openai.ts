@@ -1,50 +1,48 @@
 import { EMPTY_LENGTH, MAX_RESPONSE_TOKENS, SEARCH_SYSTEM_PROMPT } from "../constants.js";
 import OpenAI, { APIError } from "openai";
-import {
-  ResponseOutputItem,
-  ResponseOutputMessage,
-  ResponseOutputText,
-} from "openai/resources/responses/responses";
 import { SearchArgs, SearchConfig, SearchHit, StructuredSearchResponse } from "../types.js";
+
+// ── OpenAI response types (from public namespace) ───────────────────────
+
+type ResponseOutputItem = OpenAI.Responses.ResponseOutputItem;
+type ResponseOutputMessage = OpenAI.Responses.ResponseOutputMessage;
+type ResponseOutputText = OpenAI.Responses.ResponseOutputText;
 
 // ── Response processing ─────────────────────────────────────────────────
 
-const extractCitations = (annotations: ResponseOutputText["annotations"]): SearchHit[] => {
-  const seen = new Set<string>();
-  const hits: SearchHit[] = [];
-
+const extractCitations = (
+  annotations: ResponseOutputText["annotations"],
+  seen: Set<string>,
+  hits: SearchHit[],
+): void => {
   for (const annotation of annotations) {
     if (annotation.type !== "url_citation") {
-      // oxlint-disable-next-line no-empty -- skip non-citation annotations
-    } else if (!seen.has(annotation.url)) {
+      continue;
+    }
+    if (!seen.has(annotation.url)) {
       seen.add(annotation.url);
       hits.push({ title: annotation.title, url: annotation.url });
     }
   }
-
-  return hits;
 };
 
 const collectCitations = (items: ResponseOutputItem[]): SearchHit[] => {
-  const allHits: SearchHit[] = [];
+  const seen = new Set<string>();
+  const hits: SearchHit[] = [];
 
   for (const item of items) {
     if (item.type !== "message") {
-      // oxlint-disable-next-line no-empty -- skip non-message items
-    } else {
-      const message = item as ResponseOutputMessage;
-      for (const part of message.content) {
-        if (part.type === "output_text" && part.annotations.length > EMPTY_LENGTH) {
-          const hits = extractCitations(part.annotations);
-          for (const hit of hits) {
-            allHits.push(hit);
-          }
-        }
+      continue;
+    }
+    const message = item as ResponseOutputMessage;
+    for (const part of message.content) {
+      if (part.type === "output_text" && part.annotations.length > EMPTY_LENGTH) {
+        extractCitations(part.annotations, seen, hits);
       }
     }
   }
 
-  return allHits;
+  return hits;
 };
 
 const buildStructuredResponse = (
