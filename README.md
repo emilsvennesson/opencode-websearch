@@ -4,10 +4,10 @@ Web search plugin for [OpenCode](https://opencode.ai), inspired by Claude Code's
 
 ## Supported providers
 
-| Provider  | SDK package        | Search mechanism                                                                                                               |
-| --------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
-| Anthropic | `@ai-sdk/anthropic` | [Server-side `web_search` tool](https://docs.anthropic.com/en/docs/build-with-claude/tool-use/web-search-tool)                 |
-| OpenAI    | `@ai-sdk/openai`    | [Responses API web search](https://platform.openai.com/docs/guides/tools-web-search)                                          |
+| Provider  | SDK package         | Search mechanism                                                                                   |
+| --------- | ------------------- | -------------------------------------------------------------------------------------------------- |
+| Anthropic | `@ai-sdk/anthropic` | [`web_search` tool](https://docs.anthropic.com/en/docs/build-with-claude/tool-use/web-search-tool) |
+| OpenAI    | `@ai-sdk/openai`    | [Responses API web search](https://platform.openai.com/docs/guides/tools-web-search)               |
 
 ## Install
 
@@ -29,12 +29,12 @@ No configuration is needed if your active chat model belongs to a supported prov
 
 The plugin chooses which model to use for each search:
 
-| Priority | Condition                                    | Behavior                                                                   |
-| -------- | -------------------------------------------- | -------------------------------------------------------------------------- |
-| 1        | A model is tagged `"always"`                 | That model is **always** used, regardless of what you're chatting with     |
+| Priority | Condition                                      | Behavior                                                                  |
+| -------- | ---------------------------------------------- | ------------------------------------------------------------------------- |
+| 1        | A model is tagged `"always"`                   | That model is **always** used, regardless of what you're chatting with    |
 | 2        | Your active chat model is a supported provider | The active model is used directly -- no extra configuration needed        |
-| 3        | A model is tagged `"auto"`                   | That model is used as a **fallback** when the active model is unsupported |
-| 4        | None of the above                            | An error is returned                                                       |
+| 3        | A model is tagged `"auto"`                     | That model is used as a **fallback** when the active model is unsupported |
+| 4        | None of the above                              | An error is returned                                                      |
 
 ### `"auto"` mode (recommended)
 
