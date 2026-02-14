@@ -1,13 +1,18 @@
 // ── Shared Types ───────────────────────────────────────────────────────
 
 /**
- * Credentials needed to call the Anthropic API.
- * Resolved from any Anthropic provider in the OpenCode config.
+ * Credentials needed to call a provider API (Anthropic or OpenAI).
+ * Resolved from the provider's configuration in opencode.json.
  */
-interface AnthropicCredentials {
+interface ProviderCredentials {
   apiKey: string;
   baseURL?: string;
 }
+
+/**
+ * Identifies which provider type a resolution belongs to.
+ */
+type ProviderType = "anthropic" | "openai";
 
 /**
  * Fully resolved config for a single web search call:
@@ -20,15 +25,25 @@ interface SearchConfig {
 }
 
 /**
- * The result of scanning all providers at startup:
- * - `credentials`: API key + optional base URL from the first Anthropic provider
+ * The result of scanning a single provider at startup:
+ * - `credentials`: API key + optional base URL
  * - `lockedModel`: model ID if a model has `websearch: "always"` (hard lock)
  * - `fallbackModel`: model ID if a model has `"websearch": "auto"` (soft fallback)
+ * - `providerType`: which provider this resolution belongs to
  */
 interface ProviderResolution {
-  credentials: AnthropicCredentials;
+  credentials: ProviderCredentials;
   fallbackModel?: string;
   lockedModel?: string;
+  providerType: ProviderType;
+}
+
+/**
+ * Map of provider resolutions, one per supported provider type.
+ */
+interface ProviderResolutionMap {
+  anthropic?: ProviderResolution;
+  openai?: ProviderResolution;
 }
 
 // ── Active Model ───────────────────────────────────────────────────────
@@ -42,36 +57,21 @@ interface ActiveModel {
   providerID: string;
 }
 
-// ── Anthropic Response Types ───────────────────────────────────────────
+// ── Tool Args ──────────────────────────────────────────────────────────
 
-interface WebSearchResult {
-  title: string;
-  type: "web_search_result";
-  url: string;
+/**
+ * Arguments accepted by the web-search tool.
+ */
+interface SearchArgs {
+  query: string;
 }
-
-interface WebSearchToolResult {
-  content: WebSearchResult[] | { error_code: string; type: "web_search_tool_result_error" };
-  tool_use_id: string;
-  type: "web_search_tool_result";
-}
-
-interface ServerToolUse {
-  id: string;
-  input: { query: string };
-  name: string;
-  type: "server_tool_use";
-}
-
-type ContentBlock = { text: string; type: "text" } | ServerToolUse | WebSearchToolResult;
 
 export {
   ActiveModel,
-  AnthropicCredentials,
-  ContentBlock,
+  ProviderCredentials,
   ProviderResolution,
+  ProviderResolutionMap,
+  ProviderType,
+  SearchArgs,
   SearchConfig,
-  ServerToolUse,
-  WebSearchResult,
-  WebSearchToolResult,
 };
