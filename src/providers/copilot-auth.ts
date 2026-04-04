@@ -74,7 +74,7 @@ const resolveAuthPathFromStatePath = (statePath: string | undefined): string | n
   }
 
   const dataMarker = `${sep}${SHARE_DIR}${sep}${OPENCODE_DIR}`;
-  const dataPath = statePath.replace(stateMarker, dataMarker);
+  const dataPath = `${statePath.slice(EMPTY_LENGTH, -stateMarker.length)}${dataMarker}`;
   return join(dataPath, AUTH_FILE_NAME);
 };
 

@@ -17,7 +17,7 @@ import {
 interface ProviderData {
   id: string;
   key?: string;
-  models: Record<string, { api: { npm: string }; id: string; options: Record<string, unknown> }>;
+  models: Record<string, ProviderModel>;
   options: Record<string, unknown>;
 }
 

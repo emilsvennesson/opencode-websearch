@@ -62,6 +62,43 @@ const detectProviderTypeFromProviderID = (providerID: string): ProviderType | nu
   return null;
 };
 
+const detectProviderTypeFromProviderModels = (
+  models: ProviderData["models"],
+  activeModelID: string,
+): ProviderType | null => {
+  const providerModels = Object.values(models);
+
+  for (const model of providerModels) {
+    if (model.id !== activeModelID) {
+      continue;
+    }
+
+    const modelType = detectProviderTypeFromNpm(model.api.npm);
+    if (modelType) {
+      return modelType;
+    }
+  }
+
+  let detectedType: ProviderType | null = null;
+  for (const model of providerModels) {
+    const modelType = detectProviderTypeFromNpm(model.api.npm);
+    if (!modelType) {
+      continue;
+    }
+
+    if (!detectedType) {
+      detectedType = modelType;
+      continue;
+    }
+
+    if (detectedType !== modelType) {
+      return null;
+    }
+  }
+
+  return detectedType;
+};
+
 const detectActiveProviderType = (
   active: ActiveModel | undefined,
   providers: ProviderData[],
@@ -75,11 +112,12 @@ const detectActiveProviderType = (
       continue;
     }
 
-    for (const model of Object.values(provider.models)) {
-      const modelType = detectProviderTypeFromNpm(model.api.npm);
-      if (modelType) {
-        return modelType;
-      }
+    const providerModelsType = detectProviderTypeFromProviderModels(
+      provider.models,
+      active.modelID,
+    );
+    if (providerModelsType) {
+      return providerModelsType;
     }
 
     const providerType = detectProviderTypeFromProviderID(provider.id);
