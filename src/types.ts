@@ -1,8 +1,8 @@
 // ── Shared Types ───────────────────────────────────────────────────────
 
 /**
- * Credentials needed to call a provider API (Anthropic or OpenAI).
- * Resolved from the provider's configuration in opencode.json.
+ * Credentials needed to call a provider API.
+ * Resolved from provider configuration and/or OpenCode auth state.
  */
 interface ProviderCredentials {
   apiKey: string;
@@ -12,7 +12,7 @@ interface ProviderCredentials {
 /**
  * Identifies which provider type a resolution belongs to.
  */
-type ProviderType = "anthropic" | "openai";
+type ProviderType = "anthropic" | "copilot" | "openai";
 
 /**
  * Fully resolved config for a single web search call:
@@ -43,6 +43,7 @@ interface ProviderResolution {
  */
 interface ProviderResolutionMap {
   anthropic?: ProviderResolution;
+  copilot?: ProviderResolution;
   openai?: ProviderResolution;
 }
 
@@ -70,7 +71,7 @@ interface SearchArgs {
 
 /**
  * A single search result hit with a title and URL.
- * Used by both Anthropic and OpenAI providers.
+ * Used by Anthropic, OpenAI, and Copilot providers.
  */
 interface SearchHit {
   title: string;
