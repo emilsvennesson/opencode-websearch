@@ -4,15 +4,13 @@ Web search plugin for [OpenCode](https://opencode.ai) that provides web search f
 
 ## Supported providers
 
-| Provider | SDK package | Search mechanism | Supported models |
-| -------- | ----------- | ---------------- | ---------------- |
-| Anthropic | `@ai-sdk/anthropic` | [Web search tool](https://docs.anthropic.com/en/docs/build-with-claude/tool-use/web-search-tool) | `claude-haiku-4-5`, `claude-sonnet-4-6`, `claude-opus-4-6` |
-| OpenAI | `@ai-sdk/openai` | [Responses API web search](https://platform.openai.com/docs/guides/tools-web-search) | `gpt-5.4`, _gpt-5.4-mini\*_, _gpt-5.4-nano\*_, _gpt-5\*_, _gpt-5-mini\*_, _gpt-4.1\*_, _gpt-4.1-mini\*_ |
-| GitHub Copilot | `@ai-sdk/github-copilot` | [Copilot model-native web search](https://github.blog/changelog/2026-02-25-improved-web-search-in-copilot-on-github-com/) | `gpt-5.3-codex`, `gpt-5.2-codex`, `gpt-5.2`, `gpt-5.1`, `gpt-5.4-mini`, _gpt-5-mini\*_, _gpt-5.4\*_ |
+| Provider       | SDK package              | Search mechanism                                                                                                          | Notes                                                                                                                                                       |
+| -------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Anthropic      | `@ai-sdk/anthropic`      | [Web search tool](https://docs.anthropic.com/en/docs/build-with-claude/tool-use/web-search-tool)                          | This plugin uses Anthropic tool type `web_search_20250305`; model compatibility follows that tool version.                                                     |
+| OpenAI         | `@ai-sdk/openai`         | [Responses API web search](https://platform.openai.com/docs/guides/tools-web-search)                                      | Known unsupported: `gpt-4.1-nano`, and `gpt-5` with `reasoning.effort: "minimal"`.                                                                        |
+| GitHub Copilot | `@ai-sdk/github-copilot` | [Copilot model-native web search](https://github.blog/changelog/2026-02-25-improved-web-search-in-copilot-on-github-com/) | Requires `Copilot can search the web using model native search` to be enabled in GitHub Copilot settings. OpenAI-family models are working here; Claude models do not appear to work with Copilot built-in model-native search capabilities. |
 
-Models marked with \* are expected but currently untested in this repository.
-
-This model list is not exhaustive and can change as providers add, remove, or update model support.
+These limitations are based on current provider docs and can change over time.
 
 ## Install
 
@@ -28,7 +26,7 @@ OpenCode will install it automatically at startup.
 
 ## Configuration (optional)
 
-No configuration is needed if your active chat model belongs to a supported provider. To customize which model handles web searches, tag a model with `"websearch": "auto"` or `"websearch": "always"`.
+No configuration is needed if your active chat model supports the provider's native web search capability used by this plugin. To customize which model handles web searches, tag a model with `"websearch": "auto"` or `"websearch": "always"`.
 
 ### Model selection
 
@@ -37,7 +35,7 @@ The plugin chooses which model to use for each search:
 | Priority | Condition                                      | Behavior                                                                  |
 | -------- | ---------------------------------------------- | ------------------------------------------------------------------------- |
 | 1        | A model is tagged `"always"`                   | That model is **always** used, regardless of what you're chatting with    |
-| 2        | Your active chat model is a supported provider | The active model is used directly -- no extra configuration needed        |
+| 2        | Your active chat model supports native web search | The active model is used directly -- no extra configuration needed        |
 | 3        | A model is tagged `"auto"`                     | That model is used as a **fallback** when the active model is unsupported |
 | 4        | None of the above                              | An error is returned                                                      |
 
