@@ -1,6 +1,13 @@
 import Anthropic, { APIError } from "@anthropic-ai/sdk";
-import { EMPTY_LENGTH, MAX_RESPONSE_TOKENS, SEARCH_SYSTEM_PROMPT } from "../constants.js";
-import { SearchArgs, SearchConfig, SearchHit, StructuredSearchResponse } from "../types.js";
+
+import {
+  EMPTY_LENGTH,
+  MAX_RESPONSE_TOKENS,
+  SEARCH_SYSTEM_PROMPT,
+  buildSearchInput,
+} from "../shared/search.js";
+import { SearchArgs, SearchConfig, SearchHit, StructuredSearchResponse } from "../../types.js";
+import { formatUnhandledSearchError } from "../shared/errors.js";
 
 // ── Anthropic-specific types ────────────────────────────────────────────
 
@@ -32,17 +39,20 @@ const DEFAULT_SEARCH_USES = 8;
 // ── Response processing ─────────────────────────────────────────────────
 
 const processBlock = (block: ContentBlock): SearchHit[] | string | null => {
-  if (block.type === "text" && block.text.trim().length > EMPTY_LENGTH) {
-    return block.text.trim();
+  if (block.type === "text") {
+    const text = block.text.trim();
+    if (text.length > EMPTY_LENGTH) {
+      return text;
+    }
   }
 
   if (block.type === "web_search_tool_result") {
     if (!Array.isArray(block.content)) {
       return `Web search error: ${block.content.error_code}`;
     }
-    return (block.content as WebSearchResult[]).map((sr) => ({
-      title: sr.title,
-      url: sr.url,
+    return (block.content as WebSearchResult[]).map((searchResult) => ({
+      title: searchResult.title,
+      url: searchResult.url,
     }));
   }
 
@@ -79,10 +89,8 @@ const formatErrorMessage = (error: unknown): string => {
   if (error instanceof APIError) {
     return `Anthropic API error: ${error.message} (status: ${error.status})`;
   }
-  if (error instanceof Error) {
-    return `Error performing web search: ${error.message}`;
-  }
-  return `Error performing web search: ${String(error)}`;
+
+  return formatUnhandledSearchError(error);
 };
 
 // ── Client and execution ───────────────────────────────────────────────
@@ -91,9 +99,11 @@ const createAnthropicClient = (config: SearchConfig): Anthropic => {
   const options: { apiKey: string; baseURL?: string } = {
     apiKey: config.apiKey,
   };
+
   if (config.baseURL) {
     options.baseURL = config.baseURL;
   }
+
   return new Anthropic(options);
 };
 
@@ -105,7 +115,7 @@ const executeSearch = async (config: SearchConfig, args: SearchArgs): Promise<st
     max_tokens: MAX_RESPONSE_TOKENS,
     messages: [
       {
-        content: `Perform a web search for the query: ${args.query}`,
+        content: buildSearchInput(args.query),
         role: "user",
       },
     ],

@@ -1,16 +1,10 @@
 import {
-  ANTHROPIC_NPM_PACKAGE,
-  COPILOT_NPM_PACKAGE,
-  OPENAI_NPM_PACKAGE,
-  WEBSEARCH_ALWAYS,
-  WEBSEARCH_AUTO,
-} from "./constants.js";
-import {
   ProviderCredentials,
   ProviderResolution,
   ProviderResolutionMap,
   ProviderType,
 } from "./types.js";
+import { detectProviderTypeFromModel } from "./providers/registry.js";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -27,67 +21,10 @@ interface ProviderModel {
   options: Record<string, unknown>;
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────
-
-const isAnthropicProvider = (model: ProviderModel): boolean =>
-  model.api.npm === ANTHROPIC_NPM_PACKAGE;
-
-const isOpenAIProvider = (model: ProviderModel): boolean => model.api.npm === OPENAI_NPM_PACKAGE;
-
-const isCopilotProvider = (model: ProviderModel): boolean => model.api.npm === COPILOT_NPM_PACKAGE;
-
-const detectProviderType = (model: ProviderModel): ProviderType | null => {
-  if (isAnthropicProvider(model)) {
-    return "anthropic";
-  }
-  if (isOpenAIProvider(model)) {
-    return "openai";
-  }
-  if (isCopilotProvider(model)) {
-    return "copilot";
-  }
-  return null;
-};
-
-const getWebsearchOption = (model: ProviderModel): string | null => {
-  const value = model.options.websearch;
-  if (value === WEBSEARCH_ALWAYS || value === WEBSEARCH_AUTO) {
-    return value;
-  }
-  return null;
-};
-
-const normalizeBaseURL = (url: string): string => url.replace(/\/v1\/?$/, "");
-
-const extractApiKey = (options: Record<string, unknown>): string | undefined => {
-  if (typeof options.apiKey !== "string") {
-    return undefined;
-  }
-  return options.apiKey;
-};
-
-const extractBaseURL = (options: Record<string, unknown>, pt: ProviderType): string | undefined => {
-  if (typeof options.baseURL !== "string") {
-    return undefined;
-  }
-  if (pt === "anthropic") {
-    return normalizeBaseURL(options.baseURL);
-  }
-  return options.baseURL;
-};
-
-// ── Config resolution ──────────────────────────────────────────────────
-
-const extractCredentials = (
-  provider: ProviderData,
-  pt: ProviderType,
-): ProviderCredentials | null => {
-  const apiKey = provider.key ?? extractApiKey(provider.options);
-  if (!apiKey) {
-    return null;
-  }
-  return { apiKey, baseURL: extractBaseURL(provider.options, pt) };
-};
+interface ProviderModelOverrides {
+  fallbackModel?: string;
+  lockedModel?: string;
+}
 
 interface ScanResult {
   credentials: ProviderCredentials | null;
@@ -101,83 +38,162 @@ interface ScanState {
   openai: ScanResult;
 }
 
-interface ProviderModelOverrides {
-  fallbackModel?: string;
-  lockedModel?: string;
-}
+// ── Constants ──────────────────────────────────────────────────────────
+
+const WEBSEARCH_ALWAYS = "always";
+const WEBSEARCH_AUTO = "auto";
+
+// ── Helpers ────────────────────────────────────────────────────────────
+
+const getWebsearchOption = (model: ProviderModel): string | null => {
+  const value = model.options.websearch;
+  if (value === WEBSEARCH_ALWAYS || value === WEBSEARCH_AUTO) {
+    return value;
+  }
+
+  return null;
+};
+
+const normalizeBaseURL = (url: string): string => url.replace(/\/v1\/?$/, "");
+
+const extractApiKey = (options: Record<string, unknown>): string | undefined => {
+  if (typeof options.apiKey !== "string") {
+    return undefined;
+  }
+
+  return options.apiKey;
+};
+
+const extractBaseURL = (
+  options: Record<string, unknown>,
+  providerType: ProviderType,
+): string | undefined => {
+  if (typeof options.baseURL !== "string") {
+    return undefined;
+  }
+
+  if (providerType === "anthropic") {
+    return normalizeBaseURL(options.baseURL);
+  }
+
+  return options.baseURL;
+};
+
+const extractCredentials = (
+  provider: ProviderData,
+  providerType: ProviderType,
+): ProviderCredentials | null => {
+  const apiKey = provider.key ?? extractApiKey(provider.options);
+  if (!apiKey) {
+    return null;
+  }
+
+  return { apiKey, baseURL: extractBaseURL(provider.options, providerType) };
+};
+
+const createInitialScanState = (): ScanState => ({
+  anthropic: { credentials: null },
+  copilot: { credentials: null },
+  openai: { credentials: null },
+});
+
+const updateModelsFromWebsearchOption = (scan: ScanResult, model: ProviderModel): void => {
+  const option = getWebsearchOption(model);
+  if (option === WEBSEARCH_ALWAYS && !scan.lockedModel) {
+    scan.lockedModel = model.id;
+  }
+
+  if (option === WEBSEARCH_AUTO && !scan.fallbackModel) {
+    scan.fallbackModel = model.id;
+  }
+};
 
 const processProviderModel = (
   provider: ProviderData,
   model: ProviderModel,
   state: ScanState,
 ): void => {
-  const pt = detectProviderType(model);
-  if (!pt) {
+  const providerType = detectProviderTypeFromModel(model);
+  if (!providerType) {
     return;
   }
 
-  const accumulated = state[pt];
-
-  if (!accumulated.credentials) {
-    accumulated.credentials = extractCredentials(provider, pt);
+  const scan = state[providerType];
+  if (!scan.credentials) {
+    scan.credentials = extractCredentials(provider, providerType);
   }
 
-  const option = getWebsearchOption(model);
-  if (option === WEBSEARCH_ALWAYS && !accumulated.lockedModel) {
-    accumulated.lockedModel = model.id;
-  }
-  if (option === WEBSEARCH_AUTO && !accumulated.fallbackModel) {
-    accumulated.fallbackModel = model.id;
-  }
+  updateModelsFromWebsearchOption(scan, model);
 };
 
-const scanProviderModels = (provider: ProviderData, state: ScanState): void => {
+const scanProvider = (provider: ProviderData, state: ScanState): void => {
   for (const model of Object.values(provider.models)) {
     processProviderModel(provider, model, state);
   }
 };
 
-const buildResolution = (scan: ScanResult, pt: ProviderType): ProviderResolution | null => {
+const scanProviders = (providers: ProviderData[]): ScanState => {
+  const state = createInitialScanState();
+
+  for (const provider of providers) {
+    scanProvider(provider, state);
+  }
+
+  return state;
+};
+
+const buildResolution = (
+  scan: ScanResult,
+  providerType: ProviderType,
+): ProviderResolution | null => {
   if (!scan.credentials) {
     return null;
   }
+
   return {
     credentials: scan.credentials,
     fallbackModel: scan.fallbackModel,
     lockedModel: scan.lockedModel,
-    providerType: pt,
+    providerType,
   };
 };
 
-const resolveModelOverrides = (
-  providers: ProviderData[],
-  pt: ProviderType,
-): ProviderModelOverrides => {
-  const overrides: ProviderModelOverrides = {};
+const buildResolutionMap = (state: ScanState): ProviderResolutionMap => {
+  const result: ProviderResolutionMap = {};
 
-  for (const provider of providers) {
-    for (const model of Object.values(provider.models)) {
-      if (detectProviderType(model) !== pt) {
-        continue;
-      }
-      const option = getWebsearchOption(model);
-      if (option === WEBSEARCH_ALWAYS && !overrides.lockedModel) {
-        overrides.lockedModel = model.id;
-      }
-      if (option === WEBSEARCH_AUTO && !overrides.fallbackModel) {
-        overrides.fallbackModel = model.id;
-      }
-    }
+  const anthropic = buildResolution(state.anthropic, "anthropic");
+  if (anthropic) {
+    result.anthropic = anthropic;
   }
 
-  return overrides;
+  const openai = buildResolution(state.openai, "openai");
+  if (openai) {
+    result.openai = openai;
+  }
+
+  const copilot = buildResolution(state.copilot, "copilot");
+  if (copilot) {
+    result.copilot = copilot;
+  }
+
+  return result;
 };
 
-const resolveCopilotModelHint = (): string =>
-  "gpt-5.3-codex, gpt-5.2-codex, gpt-5.2, gpt-5.1, gpt-5.4-mini";
+const buildModelOverrides = (scan: ScanResult): ProviderModelOverrides => ({
+  fallbackModel: scan.fallbackModel,
+  lockedModel: scan.lockedModel,
+});
 
-const resolveGeneralModelHint = (): string =>
-  "claude-sonnet-4-6, claude-opus-4-6, gpt-5.4, gpt-5.4-mini";
+// ── Config resolution ──────────────────────────────────────────────────
+
+const resolveModelOverrides = (
+  providers: ProviderData[],
+  providerType: ProviderType,
+): ProviderModelOverrides => {
+  const state = scanProviders(providers);
+
+  return buildModelOverrides(state[providerType]);
+};
 
 /**
  * Scan providers for Anthropic, OpenAI, and GitHub Copilot credentials
@@ -191,34 +207,18 @@ const resolveGeneralModelHint = (): string =>
  * Returns a map with optional entries for each supported provider type.
  */
 const resolveFromProviders = (providers: ProviderData[]): ProviderResolutionMap => {
-  const state: ScanState = {
-    anthropic: { credentials: null },
-    copilot: { credentials: null },
-    openai: { credentials: null },
-  };
+  const state = scanProviders(providers);
 
-  for (const provider of providers) {
-    scanProviderModels(provider, state);
-  }
-
-  const result: ProviderResolutionMap = {};
-  const anthropic = buildResolution(state.anthropic, "anthropic");
-  if (anthropic) {
-    result.anthropic = anthropic;
-  }
-  const openai = buildResolution(state.openai, "openai");
-  if (openai) {
-    result.openai = openai;
-  }
-  const copilot = buildResolution(state.copilot, "copilot");
-  if (copilot) {
-    result.copilot = copilot;
-  }
-
-  return result;
+  return buildResolutionMap(state);
 };
 
 // ── Error formatting ───────────────────────────────────────────────────
+
+const resolveCopilotModelHint = (): string =>
+  "gpt-5.3-codex, gpt-5.2-codex, gpt-5.2, gpt-5.1, gpt-5.4-mini";
+
+const resolveGeneralModelHint = (): string =>
+  "claude-sonnet-4-6, claude-opus-4-6, gpt-5.4, gpt-5.4-mini";
 
 const formatNoProviderError = (): string =>
   `Error: web-search requires an Anthropic, OpenAI, or GitHub Copilot provider.

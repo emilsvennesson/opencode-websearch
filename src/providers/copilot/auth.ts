@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, sep } from "node:path";
 
-import { COPILOT_DEFAULT_BASE_URL } from "../constants.js";
+import { COPILOT_DEFAULT_BASE_URL } from "./constants.js";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
