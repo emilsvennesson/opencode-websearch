@@ -321,8 +321,6 @@ CRITICAL REQUIREMENT - You MUST follow this:
     - [Source Title 2](https://example.com/2)
 
 Usage notes:
-  - Supports Anthropic, OpenAI, and GitHub Copilot providers
-
 IMPORTANT - Use the correct year in search queries:
   - It is currently ${getCurrentMonthYear()}. You MUST use this when searching for recent information, documentation, or current events.
   - Example: If the user asks for "latest React docs", search for "React documentation" with the current year, NOT last year`,
