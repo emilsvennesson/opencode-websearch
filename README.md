@@ -28,20 +28,26 @@ OpenCode will install it automatically at startup.
 
 No configuration is needed if your active chat model supports the provider's native web search capability used by this plugin. To customize which model handles web searches, tag a model with `"websearch": "auto"` or `"websearch": "always"`.
 
+Important: `"auto"` is a provider-level fallback, not a model-level fallback.
+
 ### Model selection
 
 The plugin chooses which model to use for each search:
 
-| Priority | Condition                                      | Behavior                                                                  |
-| -------- | ---------------------------------------------- | ------------------------------------------------------------------------- |
-| 1        | A model is tagged `"always"`                   | That model is **always** used, regardless of what you're chatting with    |
-| 2        | Your active chat model supports native web search | The active model is used directly -- no extra configuration needed        |
-| 3        | A model is tagged `"auto"`                     | That model is used as a **fallback** when the active model is unsupported |
-| 4        | None of the above                              | An error is returned                                                      |
+| Priority | Condition                                                           | Behavior                                                               |
+| -------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| 1        | A model is tagged `"always"`                                        | That model is **always** used, regardless of what you're chatting with |
+| 2        | Active model is on a supported and configured provider              | The active model is used for web search                                |
+| 3        | Active model is on an unsupported provider, and a model is `"auto"` | The `"auto"` model is used as fallback                                |
+| 4        | None of the above                                                   | An error is returned                                                   |
 
-### `"auto"` mode (recommended)
+### `"auto"` mode (fallback)
 
-Use `"auto"` when you want web search to work seamlessly regardless of your active model. When your active model belongs to a supported provider, it's used directly; otherwise the tagged model kicks in as a fallback.
+Use `"auto"` to set a fallback model when your active model is on an unsupported provider.
+
+If your active model is on a supported provider, that active model is used, even if that specific model does not support web search.
+
+If you want one model to always handle web search, use `"always"`.
 
 ```json
 {
