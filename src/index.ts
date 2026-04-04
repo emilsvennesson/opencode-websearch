@@ -1,4 +1,9 @@
-import { ANTHROPIC_NPM_PACKAGE, MIN_QUERY_LENGTH, OPENAI_NPM_PACKAGE } from "./constants.js";
+import {
+  ANTHROPIC_NPM_PACKAGE,
+  COPILOT_NPM_PACKAGE,
+  MIN_QUERY_LENGTH,
+  OPENAI_NPM_PACKAGE,
+} from "./constants.js";
 import {
   ActiveModel,
   ProviderResolution,
@@ -12,19 +17,50 @@ import {
   formatNoProviderError,
   formatUnsupportedProviderError,
   resolveFromProviders,
+  resolveModelOverrides,
 } from "./config.js";
 import {
   executeSearch as executeAnthropicSearch,
   formatErrorMessage as formatAnthropicError,
 } from "./providers/anthropic.js";
 import {
+  executeSearch as executeCopilotSearch,
+  formatErrorMessage as formatCopilotError,
+} from "./providers/copilot.js";
+import {
   executeSearch as executeOpenAISearch,
   formatErrorMessage as formatOpenAIError,
 } from "./providers/openai.js";
-
 import { getCurrentMonthYear } from "./helpers.js";
+import { resolveCopilotCredentials } from "./providers/copilot-auth.js";
 
 // ── Provider detection ─────────────────────────────────────────────────
+
+const detectProviderTypeFromNpm = (npmPackage: string): ProviderType | null => {
+  if (npmPackage === ANTHROPIC_NPM_PACKAGE) {
+    return "anthropic";
+  }
+  if (npmPackage === OPENAI_NPM_PACKAGE) {
+    return "openai";
+  }
+  if (npmPackage === COPILOT_NPM_PACKAGE) {
+    return "copilot";
+  }
+  return null;
+};
+
+const detectProviderTypeFromProviderID = (providerID: string): ProviderType | null => {
+  if (providerID.includes("github-copilot") || providerID.includes("copilot")) {
+    return "copilot";
+  }
+  if (providerID.includes("anthropic")) {
+    return "anthropic";
+  }
+  if (providerID.includes("openai")) {
+    return "openai";
+  }
+  return null;
+};
 
 const detectActiveProviderType = (
   active: ActiveModel | undefined,
@@ -35,20 +71,36 @@ const detectActiveProviderType = (
   }
 
   for (const provider of providers) {
+    if (provider.id !== active.providerID) {
+      continue;
+    }
+
+    for (const model of Object.values(provider.models)) {
+      const modelType = detectProviderTypeFromNpm(model.api.npm);
+      if (modelType) {
+        return modelType;
+      }
+    }
+
+    const providerType = detectProviderTypeFromProviderID(provider.id);
+    if (providerType) {
+      return providerType;
+    }
+  }
+
+  for (const provider of providers) {
     for (const model of Object.values(provider.models)) {
       if (model.id !== active.modelID) {
         continue;
       }
-      if (model.api.npm === ANTHROPIC_NPM_PACKAGE) {
-        return "anthropic";
-      }
-      if (model.api.npm === OPENAI_NPM_PACKAGE) {
-        return "openai";
+      const modelType = detectProviderTypeFromNpm(model.api.npm);
+      if (modelType) {
+        return modelType;
       }
     }
   }
 
-  return null;
+  return detectProviderTypeFromProviderID(active.providerID);
 };
 
 // ── Model resolution ───────────────────────────────────────────────────
@@ -79,6 +131,12 @@ const resolveLockedModel = (resolutions: ProviderResolutionMap): ResolvedProvide
     return {
       config: buildSearchConfig(resolutions.openai, resolutions.openai.lockedModel),
       providerType: "openai",
+    };
+  }
+  if (resolutions.copilot?.lockedModel) {
+    return {
+      config: buildSearchConfig(resolutions.copilot, resolutions.copilot.lockedModel),
+      providerType: "copilot",
     };
   }
   return null;
@@ -117,6 +175,12 @@ const resolveFallbackModel = (resolutions: ProviderResolutionMap): ResolvedProvi
     return {
       config: buildSearchConfig(resolutions.openai, resolutions.openai.fallbackModel),
       providerType: "openai",
+    };
+  }
+  if (resolutions.copilot?.fallbackModel) {
+    return {
+      config: buildSearchConfig(resolutions.copilot, resolutions.copilot.fallbackModel),
+      providerType: "copilot",
     };
   }
   return null;
@@ -158,19 +222,40 @@ interface ProviderState {
   resolutions: ProviderResolutionMap;
 }
 
-const resolveProviderState = async (client: {
-  config: { providers: () => Promise<{ data?: { providers: unknown[] } }> };
-}): Promise<ProviderState> => {
+const resolveProviderState = async (
+  client: {
+    config: { providers: () => Promise<{ data?: { providers: unknown[] } }> };
+    path: {
+      get: (options?: { query?: { directory?: string } }) => Promise<{ data?: { state?: string } }>;
+    };
+  },
+  directory: string,
+): Promise<ProviderState> => {
   const { data } = await client.config.providers();
   if (!data) {
     return { list: [], resolutions: {} };
   }
   const list = data.providers as ProviderData[];
-  return { list, resolutions: resolveFromProviders(list) };
+  const resolutions = resolveFromProviders(list);
+
+  const copilotCredentials = await resolveCopilotCredentials(client, directory);
+  if (copilotCredentials) {
+    const modelOverrides = resolveModelOverrides(list, "copilot");
+    resolutions.copilot = {
+      credentials: copilotCredentials,
+      fallbackModel: modelOverrides.fallbackModel,
+      lockedModel: modelOverrides.lockedModel,
+      providerType: "copilot",
+    };
+  }
+
+  return { list, resolutions };
 };
 
 const hasAnyProvider = (resolutions: ProviderResolutionMap): boolean =>
-  resolutions.anthropic !== undefined || resolutions.openai !== undefined;
+  resolutions.anthropic !== undefined ||
+  resolutions.copilot !== undefined ||
+  resolutions.openai !== undefined;
 
 // ── Search dispatch ────────────────────────────────────────────────────
 
@@ -179,12 +264,18 @@ const dispatchSearch = async (resolved: ResolvedProvider, query: string): Promis
   if (resolved.providerType === "anthropic") {
     return executeAnthropicSearch(resolved.config, args);
   }
+  if (resolved.providerType === "copilot") {
+    return executeCopilotSearch(resolved.config, args);
+  }
   return executeOpenAISearch(resolved.config, args);
 };
 
 const dispatchErrorMessage = (providerType: ProviderType, error: unknown): string => {
   if (providerType === "anthropic") {
     return formatAnthropicError(error);
+  }
+  if (providerType === "copilot") {
+    return formatCopilotError(error);
   }
   return formatOpenAIError(error);
 };
@@ -230,7 +321,7 @@ CRITICAL REQUIREMENT - You MUST follow this:
     - [Source Title 2](https://example.com/2)
 
 Usage notes:
-  - Supports Anthropic and OpenAI providers
+  - Supports Anthropic, OpenAI, and GitHub Copilot providers
 
 IMPORTANT - Use the correct year in search queries:
   - It is currently ${getCurrentMonthYear()}. You MUST use this when searching for recent information, documentation, or current events.
@@ -238,7 +329,7 @@ IMPORTANT - Use the correct year in search queries:
 
         async execute(args, context) {
           if (!state) {
-            state = await resolveProviderState(input.client);
+            state = await resolveProviderState(input.client, input.directory);
           }
 
           if (!hasAnyProvider(state.resolutions)) {

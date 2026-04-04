@@ -1,5 +1,6 @@
 import {
   ANTHROPIC_NPM_PACKAGE,
+  COPILOT_NPM_PACKAGE,
   OPENAI_NPM_PACKAGE,
   WEBSEARCH_ALWAYS,
   WEBSEARCH_AUTO,
@@ -20,25 +21,35 @@ interface ProviderData {
   options: Record<string, unknown>;
 }
 
+interface ProviderModel {
+  api: { npm: string };
+  id: string;
+  options: Record<string, unknown>;
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────
 
-const isAnthropicProvider = (model: { api: { npm: string } }): boolean =>
+const isAnthropicProvider = (model: ProviderModel): boolean =>
   model.api.npm === ANTHROPIC_NPM_PACKAGE;
 
-const isOpenAIProvider = (model: { api: { npm: string } }): boolean =>
-  model.api.npm === OPENAI_NPM_PACKAGE;
+const isOpenAIProvider = (model: ProviderModel): boolean => model.api.npm === OPENAI_NPM_PACKAGE;
 
-const detectProviderType = (model: { api: { npm: string } }): ProviderType | null => {
+const isCopilotProvider = (model: ProviderModel): boolean => model.api.npm === COPILOT_NPM_PACKAGE;
+
+const detectProviderType = (model: ProviderModel): ProviderType | null => {
   if (isAnthropicProvider(model)) {
     return "anthropic";
   }
   if (isOpenAIProvider(model)) {
     return "openai";
   }
+  if (isCopilotProvider(model)) {
+    return "copilot";
+  }
   return null;
 };
 
-const getWebsearchOption = (model: { options: Record<string, unknown> }): string | null => {
+const getWebsearchOption = (model: ProviderModel): string | null => {
   const value = model.options.websearch;
   if (value === WEBSEARCH_ALWAYS || value === WEBSEARCH_AUTO) {
     return value;
@@ -86,12 +97,18 @@ interface ScanResult {
 
 interface ScanState {
   anthropic: ScanResult;
+  copilot: ScanResult;
   openai: ScanResult;
+}
+
+interface ProviderModelOverrides {
+  fallbackModel?: string;
+  lockedModel?: string;
 }
 
 const processProviderModel = (
   provider: ProviderData,
-  model: { api: { npm: string }; id: string; options: Record<string, unknown> },
+  model: ProviderModel,
   state: ScanState,
 ): void => {
   const pt = detectProviderType(model);
@@ -132,8 +149,39 @@ const buildResolution = (scan: ScanResult, pt: ProviderType): ProviderResolution
   };
 };
 
+const resolveModelOverrides = (
+  providers: ProviderData[],
+  pt: ProviderType,
+): ProviderModelOverrides => {
+  const overrides: ProviderModelOverrides = {};
+
+  for (const provider of providers) {
+    for (const model of Object.values(provider.models)) {
+      if (detectProviderType(model) !== pt) {
+        continue;
+      }
+      const option = getWebsearchOption(model);
+      if (option === WEBSEARCH_ALWAYS && !overrides.lockedModel) {
+        overrides.lockedModel = model.id;
+      }
+      if (option === WEBSEARCH_AUTO && !overrides.fallbackModel) {
+        overrides.fallbackModel = model.id;
+      }
+    }
+  }
+
+  return overrides;
+};
+
+const resolveCopilotModelHint = (): string =>
+  "gpt-5.3-codex, gpt-5.2-codex, gpt-5.2, gpt-5.1, gpt-5.4-mini";
+
+const resolveGeneralModelHint = (): string =>
+  "claude-sonnet-4-6, claude-opus-4-6, gpt-5.4, gpt-5.4-mini";
+
 /**
- * Scan providers for Anthropic and OpenAI credentials and any websearch-tagged models.
+ * Scan providers for Anthropic, OpenAI, and GitHub Copilot credentials
+ * and any websearch-tagged models.
  *
  * Resolution priority (per provider):
  * - `lockedModel`:   first model with `"websearch": "always"` (hard lock)
@@ -145,6 +193,7 @@ const buildResolution = (scan: ScanResult, pt: ProviderType): ProviderResolution
 const resolveFromProviders = (providers: ProviderData[]): ProviderResolutionMap => {
   const state: ScanState = {
     anthropic: { credentials: null },
+    copilot: { credentials: null },
     openai: { credentials: null },
   };
 
@@ -161,6 +210,10 @@ const resolveFromProviders = (providers: ProviderData[]): ProviderResolutionMap 
   if (openai) {
     result.openai = openai;
   }
+  const copilot = buildResolution(state.copilot, "copilot");
+  if (copilot) {
+    result.copilot = copilot;
+  }
 
   return result;
 };
@@ -168,7 +221,7 @@ const resolveFromProviders = (providers: ProviderData[]): ProviderResolutionMap 
 // ── Error formatting ───────────────────────────────────────────────────
 
 const formatNoProviderError = (): string =>
-  `Error: web-search requires an Anthropic or OpenAI provider.
+  `Error: web-search requires an Anthropic, OpenAI, or GitHub Copilot provider.
 
 No supported provider with a valid API key was found in your opencode.json configuration.
 
@@ -196,18 +249,22 @@ Or:
   }
 }
 
+Or, if you use GitHub Copilot, ensure you're signed in to Copilot in OpenCode.
+
 Steps:
 1. Open your opencode.json (project root, .opencode/, or ~/.config/opencode/)
-2. Ensure you have an Anthropic or OpenAI provider configured with a valid API key
+2. Ensure you have an Anthropic/OpenAI provider configured with a valid API key, or active GitHub Copilot auth
 3. Restart OpenCode to pick up the configuration change`;
 
 const formatUnsupportedProviderError = (activeModelID: string): string =>
   `Error: your current model (${activeModelID}) does not support web search.
 
-Web search requires an Anthropic or OpenAI model.
+Web search requires an Anthropic, OpenAI, or GitHub Copilot web-search-capable model.
+
+Known Copilot models that work with web search today include: ${resolveCopilotModelHint()}.
 
 You can either:
-1. Switch to a supported model (e.g. claude-sonnet-4-5 or gpt-4o)
+1. Switch to a supported model (e.g. ${resolveGeneralModelHint()})
 2. Set \`"websearch": "auto"\` on a supported model to use it as a fallback:
 
 {
@@ -230,5 +287,6 @@ export {
   formatNoProviderError,
   formatUnsupportedProviderError,
   ProviderData,
+  resolveModelOverrides,
   resolveFromProviders,
 };
