@@ -1,7 +1,7 @@
 # AGENTS.md
 
 OpenCode plugin that provides web search via provider web search APIs.
-Supports multiple providers (Anthropic, OpenAI). Multi-file TypeScript project built with Bun, linted with oxlint.
+Supports multiple providers (Anthropic, OpenAI, GitHub Copilot). Multi-file TypeScript project built with Bun, linted with oxlint.
 
 ## Commands
 
@@ -24,12 +24,23 @@ There are no tests yet. When adding tests, use `bun:test` (built into Bun).
 src/
   index.ts              # plugin entry point — exports the plugin, wires tools
   types.ts              # shared types (config, provider resolution, search result shapes)
-  constants.ts          # shared UPPER_SNAKE_CASE constants
   helpers.ts            # generic utilities (date formatting)
   config.ts             # config resolution (opencode.json, env fallback)
   providers/
-    anthropic.ts        # Anthropic web search (client, execution, response formatting)
-    openai.ts           # OpenAI web search (client, execution, response formatting)
+    index.ts            # provider dispatch map (execute + error format)
+    registry.ts         # provider metadata + provider detection helpers
+    anthropic/
+      index.ts          # Anthropic web search (client, execution, response formatting)
+    openai/
+      index.ts          # OpenAI web search (client, execution, response formatting)
+    copilot/
+      auth.ts           # Copilot auth state and credential resolution
+      constants.ts      # Copilot-specific constants
+      index.ts          # Copilot web search (client, execution, response formatting)
+    shared/
+      errors.ts         # shared provider error fallback formatting
+      openai-compatible.ts # shared OpenAI/Copilot client + response helpers
+      search.ts         # shared search request/response constants and helpers
 dist/                   # build output (gitignored)
 .oxlintrc.json          # oxlint configuration
 tsconfig.json           # TypeScript config (strict, ESNext)

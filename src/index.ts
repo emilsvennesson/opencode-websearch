@@ -1,10 +1,4 @@
 import {
-  ANTHROPIC_NPM_PACKAGE,
-  COPILOT_NPM_PACKAGE,
-  MIN_QUERY_LENGTH,
-  OPENAI_NPM_PACKAGE,
-} from "./constants.js";
-import {
   ActiveModel,
   ProviderResolution,
   ProviderResolutionMap,
@@ -19,68 +13,25 @@ import {
   resolveFromProviders,
   resolveModelOverrides,
 } from "./config.js";
-import {
-  executeSearch as executeAnthropicSearch,
-  formatErrorMessage as formatAnthropicError,
-} from "./providers/anthropic.js";
-import {
-  executeSearch as executeCopilotSearch,
-  formatErrorMessage as formatCopilotError,
-} from "./providers/copilot.js";
-import {
-  executeSearch as executeOpenAISearch,
-  formatErrorMessage as formatOpenAIError,
-} from "./providers/openai.js";
 import { getCurrentMonthYear } from "./helpers.js";
-import { resolveCopilotCredentials } from "./providers/copilot-auth.js";
+import { resolveCopilotCredentials } from "./providers/copilot/auth.js";
+import { dispatchErrorMessage, dispatchSearch } from "./providers/index.js";
+import {
+  RESOLUTION_PRIORITY,
+  detectProviderTypeFromNpm,
+  detectProviderTypeFromProviderID,
+} from "./providers/registry.js";
+
+// ── Constants ──────────────────────────────────────────────────────────
+
+const MIN_QUERY_LENGTH = 2;
 
 // ── Provider detection ─────────────────────────────────────────────────
 
-const detectProviderTypeFromNpm = (npmPackage: string): ProviderType | null => {
-  if (npmPackage === ANTHROPIC_NPM_PACKAGE) {
-    return "anthropic";
-  }
-  if (npmPackage === OPENAI_NPM_PACKAGE) {
-    return "openai";
-  }
-  if (npmPackage === COPILOT_NPM_PACKAGE) {
-    return "copilot";
-  }
-  return null;
-};
-
-const detectProviderTypeFromProviderID = (providerID: string): ProviderType | null => {
-  if (providerID.includes("github-copilot") || providerID.includes("copilot")) {
-    return "copilot";
-  }
-  if (providerID.includes("anthropic")) {
-    return "anthropic";
-  }
-  if (providerID.includes("openai")) {
-    return "openai";
-  }
-  return null;
-};
-
-const detectProviderTypeFromProviderModels = (
-  models: ProviderData["models"],
-  activeModelID: string,
-): ProviderType | null => {
-  const providerModels = Object.values(models);
-
-  for (const model of providerModels) {
-    if (model.id !== activeModelID) {
-      continue;
-    }
-
-    const modelType = detectProviderTypeFromNpm(model.api.npm);
-    if (modelType) {
-      return modelType;
-    }
-  }
-
+const detectUniformProviderType = (models: ProviderData["models"]): ProviderType | null => {
   let detectedType: ProviderType | null = null;
-  for (const model of providerModels) {
+
+  for (const model of Object.values(models)) {
     const modelType = detectProviderTypeFromNpm(model.api.npm);
     if (!modelType) {
       continue;
@@ -99,25 +50,36 @@ const detectProviderTypeFromProviderModels = (
   return detectedType;
 };
 
-const detectActiveProviderType = (
-  active: ActiveModel | undefined,
-  providers: ProviderData[],
+const detectProviderTypeFromProviderModels = (
+  models: ProviderData["models"],
+  activeModelID: string,
 ): ProviderType | null => {
-  if (!active) {
-    return null;
+  for (const model of Object.values(models)) {
+    if (model.id !== activeModelID) {
+      continue;
+    }
+
+    const modelType = detectProviderTypeFromNpm(model.api.npm);
+    if (modelType) {
+      return modelType;
+    }
   }
 
+  return detectUniformProviderType(models);
+};
+
+const detectTypeFromActiveProvider = (
+  active: ActiveModel,
+  providers: ProviderData[],
+): ProviderType | null => {
   for (const provider of providers) {
     if (provider.id !== active.providerID) {
       continue;
     }
 
-    const providerModelsType = detectProviderTypeFromProviderModels(
-      provider.models,
-      active.modelID,
-    );
-    if (providerModelsType) {
-      return providerModelsType;
+    const modelsType = detectProviderTypeFromProviderModels(provider.models, active.modelID);
+    if (modelsType) {
+      return modelsType;
     }
 
     const providerType = detectProviderTypeFromProviderID(provider.id);
@@ -126,16 +88,45 @@ const detectActiveProviderType = (
     }
   }
 
+  return null;
+};
+
+const detectTypeFromAnyModelMatch = (
+  activeModelID: string,
+  providers: ProviderData[],
+): ProviderType | null => {
   for (const provider of providers) {
     for (const model of Object.values(provider.models)) {
-      if (model.id !== active.modelID) {
+      if (model.id !== activeModelID) {
         continue;
       }
+
       const modelType = detectProviderTypeFromNpm(model.api.npm);
       if (modelType) {
         return modelType;
       }
     }
+  }
+
+  return null;
+};
+
+const detectActiveProviderType = (
+  active: ActiveModel | undefined,
+  providers: ProviderData[],
+): ProviderType | null => {
+  if (!active) {
+    return null;
+  }
+
+  const activeProviderType = detectTypeFromActiveProvider(active, providers);
+  if (activeProviderType) {
+    return activeProviderType;
+  }
+
+  const modelMatchType = detectTypeFromAnyModelMatch(active.modelID, providers);
+  if (modelMatchType) {
+    return modelMatchType;
   }
 
   return detectProviderTypeFromProviderID(active.providerID);
@@ -154,31 +145,36 @@ const buildSearchConfig = (resolution: ProviderResolution, modelID: string): Sea
   model: modelID,
 });
 
+const resolveModelByPriority = (
+  resolutions: ProviderResolutionMap,
+  modelKey: "fallbackModel" | "lockedModel",
+): ResolvedProvider | null => {
+  for (const providerType of RESOLUTION_PRIORITY) {
+    const resolution = resolutions[providerType];
+    if (!resolution) {
+      continue;
+    }
+
+    const modelID = resolution[modelKey];
+    if (!modelID) {
+      continue;
+    }
+
+    return {
+      config: buildSearchConfig(resolution, modelID),
+      providerType,
+    };
+  }
+
+  return null;
+};
+
 /**
  * Resolve the locked model for a given provider resolution.
  * Returns a ResolvedProvider if a locked model is set, otherwise null.
  */
-const resolveLockedModel = (resolutions: ProviderResolutionMap): ResolvedProvider | null => {
-  if (resolutions.anthropic?.lockedModel) {
-    return {
-      config: buildSearchConfig(resolutions.anthropic, resolutions.anthropic.lockedModel),
-      providerType: "anthropic",
-    };
-  }
-  if (resolutions.openai?.lockedModel) {
-    return {
-      config: buildSearchConfig(resolutions.openai, resolutions.openai.lockedModel),
-      providerType: "openai",
-    };
-  }
-  if (resolutions.copilot?.lockedModel) {
-    return {
-      config: buildSearchConfig(resolutions.copilot, resolutions.copilot.lockedModel),
-      providerType: "copilot",
-    };
-  }
-  return null;
-};
+const resolveLockedModel = (resolutions: ProviderResolutionMap): ResolvedProvider | null =>
+  resolveModelByPriority(resolutions, "lockedModel");
 
 /**
  * Resolve using the active model's provider directly.
@@ -202,27 +198,8 @@ const resolveActiveModel = (
 /**
  * Resolve a fallback model from any provider with `"websearch": "auto"`.
  */
-const resolveFallbackModel = (resolutions: ProviderResolutionMap): ResolvedProvider | null => {
-  if (resolutions.anthropic?.fallbackModel) {
-    return {
-      config: buildSearchConfig(resolutions.anthropic, resolutions.anthropic.fallbackModel),
-      providerType: "anthropic",
-    };
-  }
-  if (resolutions.openai?.fallbackModel) {
-    return {
-      config: buildSearchConfig(resolutions.openai, resolutions.openai.fallbackModel),
-      providerType: "openai",
-    };
-  }
-  if (resolutions.copilot?.fallbackModel) {
-    return {
-      config: buildSearchConfig(resolutions.copilot, resolutions.copilot.fallbackModel),
-      providerType: "copilot",
-    };
-  }
-  return null;
-};
+const resolveFallbackModel = (resolutions: ProviderResolutionMap): ResolvedProvider | null =>
+  resolveModelByPriority(resolutions, "fallbackModel");
 
 /**
  * Determine which provider and model to use for a web search call.
@@ -273,6 +250,7 @@ const resolveProviderState = async (
   if (!data) {
     return { list: [], resolutions: {} };
   }
+
   const list = data.providers as ProviderData[];
   const resolutions = resolveFromProviders(list);
 
@@ -290,32 +268,20 @@ const resolveProviderState = async (
   return { list, resolutions };
 };
 
-const hasAnyProvider = (resolutions: ProviderResolutionMap): boolean =>
-  resolutions.anthropic !== undefined ||
-  resolutions.copilot !== undefined ||
-  resolutions.openai !== undefined;
+const hasAnyProvider = (resolutions: ProviderResolutionMap): boolean => {
+  if (resolutions.anthropic) {
+    return true;
+  }
 
-// ── Search dispatch ────────────────────────────────────────────────────
+  if (resolutions.openai) {
+    return true;
+  }
 
-const dispatchSearch = async (resolved: ResolvedProvider, query: string): Promise<string> => {
-  const args = { query };
-  if (resolved.providerType === "anthropic") {
-    return executeAnthropicSearch(resolved.config, args);
+  if (resolutions.copilot) {
+    return true;
   }
-  if (resolved.providerType === "copilot") {
-    return executeCopilotSearch(resolved.config, args);
-  }
-  return executeOpenAISearch(resolved.config, args);
-};
 
-const dispatchErrorMessage = (providerType: ProviderType, error: unknown): string => {
-  if (providerType === "anthropic") {
-    return formatAnthropicError(error);
-  }
-  if (providerType === "copilot") {
-    return formatCopilotError(error);
-  }
-  return formatOpenAIError(error);
+  return false;
 };
 
 // ── Plugin ─────────────────────────────────────────────────────────────
@@ -374,7 +340,6 @@ IMPORTANT - Use the correct year in search queries:
 
           const active = activeModels.get(context.sessionID);
           const activeType = detectActiveProviderType(active, state.list);
-
           const resolved = resolveSearchProvider(state.resolutions, active, activeType);
 
           if (!resolved) {
@@ -382,7 +347,7 @@ IMPORTANT - Use the correct year in search queries:
           }
 
           try {
-            return await dispatchSearch(resolved, args.query);
+            return await dispatchSearch(resolved.providerType, resolved.config, args.query);
           } catch (error) {
             return dispatchErrorMessage(resolved.providerType, error);
           }
