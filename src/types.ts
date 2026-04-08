@@ -5,6 +5,7 @@
  * Resolved from provider configuration and/or OpenCode auth state.
  */
 interface ProviderCredentials {
+  accountId?: string;
   apiKey: string;
   baseURL?: string;
 }
@@ -12,13 +13,14 @@ interface ProviderCredentials {
 /**
  * Identifies which provider type a resolution belongs to.
  */
-type ProviderType = "anthropic" | "copilot" | "openai";
+type ProviderType = "anthropic" | "chatgpt" | "copilot" | "openai";
 
 /**
  * Fully resolved config for a single web search call:
  * credentials + the specific model to use.
  */
 interface SearchConfig {
+  accountId?: string;
   apiKey: string;
   baseURL?: string;
   model: string;
@@ -43,6 +45,7 @@ interface ProviderResolution {
  */
 interface ProviderResolutionMap {
   anthropic?: ProviderResolution;
+  chatgpt?: ProviderResolution;
   copilot?: ProviderResolution;
   openai?: ProviderResolution;
 }

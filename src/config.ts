@@ -34,6 +34,7 @@ interface ScanResult {
 
 interface ScanState {
   anthropic: ScanResult;
+  chatgpt: ScanResult;
   copilot: ScanResult;
   openai: ScanResult;
 }
@@ -93,6 +94,7 @@ const extractCredentials = (
 
 const createInitialScanState = (): ScanState => ({
   anthropic: { credentials: null },
+  chatgpt: { credentials: null },
   copilot: { credentials: null },
   openai: { credentials: null },
 });
@@ -166,6 +168,11 @@ const buildResolutionMap = (state: ScanState): ProviderResolutionMap => {
     result.anthropic = anthropic;
   }
 
+  const chatgpt = buildResolution(state.chatgpt, "chatgpt");
+  if (chatgpt) {
+    result.chatgpt = chatgpt;
+  }
+
   const openai = buildResolution(state.openai, "openai");
   if (openai) {
     result.openai = openai;
@@ -214,11 +221,11 @@ const resolveFromProviders = (providers: ProviderData[]): ProviderResolutionMap 
 
 // ── Error formatting ───────────────────────────────────────────────────
 
-const resolveCopilotModelHint = (): string =>
-  "gpt-5.3-codex, gpt-5.2-codex, gpt-5.2, gpt-5.1, gpt-5.4-mini";
-
 const resolveGeneralModelHint = (): string =>
   "claude-sonnet-4-6, claude-opus-4-6, gpt-5.4, gpt-5.4-mini";
+
+const resolveCopilotModelHint = (): string =>
+  "gpt-5.3-codex, gpt-5.2-codex, gpt-5.2, gpt-5.1, gpt-5.4-mini";
 
 const formatNoProviderError = (): string =>
   `Error: web-search requires an Anthropic, OpenAI, or GitHub Copilot provider.
@@ -248,8 +255,6 @@ Or:
     }
   }
 }
-
-Or, if you use GitHub Copilot, ensure you're signed in to Copilot in OpenCode.
 
 Steps:
 1. Open your opencode.json (project root, .opencode/, or ~/.config/opencode/)

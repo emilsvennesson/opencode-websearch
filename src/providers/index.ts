@@ -4,6 +4,10 @@ import {
   formatErrorMessage as formatAnthropicError,
 } from "./anthropic/index.js";
 import {
+  executeSearch as executeChatGPTSearch,
+  formatErrorMessage as formatChatGPTError,
+} from "./chatgpt/index.js";
+import {
   executeSearch as executeCopilotSearch,
   formatErrorMessage as formatCopilotError,
 } from "./copilot/index.js";
@@ -25,6 +29,10 @@ const PROVIDER_ADAPTERS: Record<ProviderType, ProviderAdapter> = {
   anthropic: {
     executeSearch: executeAnthropicSearch,
     formatErrorMessage: formatAnthropicError,
+  },
+  chatgpt: {
+    executeSearch: executeChatGPTSearch,
+    formatErrorMessage: formatChatGPTError,
   },
   copilot: {
     executeSearch: executeCopilotSearch,
