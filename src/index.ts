@@ -26,7 +26,6 @@ import {
 // ── Constants ──────────────────────────────────────────────────────────
 
 const MIN_QUERY_LENGTH = 2;
-const OPENAI_DEFAULT_BASE_URL = "https://api.openai.com";
 
 // ── Provider detection ─────────────────────────────────────────────────
 
@@ -134,27 +133,22 @@ const detectActiveProviderType = (
   return detectProviderTypeFromProviderID(active.providerID);
 };
 
-const normalizeOpenAIBaseURL = (baseURL: string): string =>
-  baseURL.replace(/\/v1\/?$/, "").replace(/\/$/, "");
-
-const isDefaultOpenAIBaseURL = (baseURL: string | undefined): boolean => {
-  if (!baseURL) {
-    return true;
-  }
-
-  const normalizedBaseURL = normalizeOpenAIBaseURL(baseURL);
-
-  return normalizedBaseURL === OPENAI_DEFAULT_BASE_URL;
-};
-
-const shouldAttachChatGPTResolution = (resolutions: ProviderResolutionMap): boolean => {
+const hasConfiguredOpenAIBaseURL = (resolutions: ProviderResolutionMap): boolean => {
   const openaiResolution = resolutions.openai;
   if (!openaiResolution) {
-    return true;
+    return false;
   }
 
-  return isDefaultOpenAIBaseURL(openaiResolution.credentials.baseURL);
+  const { baseURL } = openaiResolution.credentials;
+  if (typeof baseURL !== "string") {
+    return false;
+  }
+
+  return baseURL.trim() !== "";
 };
+
+const shouldAttachChatGPTResolution = (resolutions: ProviderResolutionMap): boolean =>
+  !hasConfiguredOpenAIBaseURL(resolutions);
 
 // ── Model resolution ───────────────────────────────────────────────────
 
