@@ -38,6 +38,8 @@ interface ScanState {
   openai: ScanResult;
 }
 
+type ScannableProviderType = Exclude<ProviderType, "chatgpt">;
+
 // ── Constants ──────────────────────────────────────────────────────────
 
 const WEBSEARCH_ALWAYS = "always";
@@ -97,6 +99,16 @@ const createInitialScanState = (): ScanState => ({
   openai: { credentials: null },
 });
 
+const isScannableProviderType = (
+  providerType: ProviderType,
+): providerType is ScannableProviderType => {
+  if (providerType === "chatgpt") {
+    return false;
+  }
+
+  return true;
+};
+
 const updateModelsFromWebsearchOption = (scan: ScanResult, model: ProviderModel): void => {
   const option = getWebsearchOption(model);
   if (option === WEBSEARCH_ALWAYS && !scan.lockedModel) {
@@ -115,6 +127,10 @@ const processProviderModel = (
 ): void => {
   const providerType = detectProviderTypeFromModel(model);
   if (!providerType) {
+    return;
+  }
+
+  if (!isScannableProviderType(providerType)) {
     return;
   }
 
@@ -144,7 +160,7 @@ const scanProviders = (providers: ProviderData[]): ScanState => {
 
 const buildResolution = (
   scan: ScanResult,
-  providerType: ProviderType,
+  providerType: ScannableProviderType,
 ): ProviderResolution | null => {
   if (!scan.credentials) {
     return null;
@@ -188,7 +204,7 @@ const buildModelOverrides = (scan: ScanResult): ProviderModelOverrides => ({
 
 const resolveModelOverrides = (
   providers: ProviderData[],
-  providerType: ProviderType,
+  providerType: ScannableProviderType,
 ): ProviderModelOverrides => {
   const state = scanProviders(providers);
 
@@ -214,16 +230,16 @@ const resolveFromProviders = (providers: ProviderData[]): ProviderResolutionMap 
 
 // ── Error formatting ───────────────────────────────────────────────────
 
-const resolveCopilotModelHint = (): string =>
-  "gpt-5.3-codex, gpt-5.2-codex, gpt-5.2, gpt-5.1, gpt-5.4-mini";
-
 const resolveGeneralModelHint = (): string =>
   "claude-sonnet-4-6, claude-opus-4-6, gpt-5.4, gpt-5.4-mini";
 
-const formatNoProviderError = (): string =>
-  `Error: web-search requires an Anthropic, OpenAI, or GitHub Copilot provider.
+const resolveCopilotModelHint = (): string =>
+  "gpt-5.3-codex, gpt-5.2-codex, gpt-5.2, gpt-5.1, gpt-5.4-mini";
 
-No supported provider with a valid API key was found in your opencode.json configuration.
+const formatNoProviderError = (): string =>
+  `Error: web-search requires an Anthropic, OpenAI (API key or ChatGPT OAuth), or GitHub Copilot provider.
+
+No supported provider credentials (API key or OAuth) were found.
 
 To fix this, add an Anthropic or OpenAI provider to your opencode.json:
 
@@ -249,11 +265,9 @@ Or:
   }
 }
 
-Or, if you use GitHub Copilot, ensure you're signed in to Copilot in OpenCode.
-
 Steps:
 1. Open your opencode.json (project root, .opencode/, or ~/.config/opencode/)
-2. Ensure you have an Anthropic/OpenAI provider configured with a valid API key, or active GitHub Copilot auth
+2. Ensure you have an Anthropic/OpenAI provider configured with a valid API key, or active OpenAI ChatGPT OAuth/Copilot auth
 3. Restart OpenCode to pick up the configuration change`;
 
 const formatUnsupportedProviderError = (activeModelID: string): string =>

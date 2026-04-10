@@ -14,6 +14,7 @@ import {
   resolveModelOverrides,
 } from "./config.js";
 import { getCurrentMonthYear } from "./helpers.js";
+import { resolveChatGPTCredentials } from "./providers/chatgpt/auth.js";
 import { resolveCopilotCredentials } from "./providers/copilot/auth.js";
 import { dispatchErrorMessage, dispatchSearch } from "./providers/index.js";
 import {
@@ -132,6 +133,23 @@ const detectActiveProviderType = (
   return detectProviderTypeFromProviderID(active.providerID);
 };
 
+const hasConfiguredOpenAIBaseURL = (resolutions: ProviderResolutionMap): boolean => {
+  const openaiResolution = resolutions.openai;
+  if (!openaiResolution) {
+    return false;
+  }
+
+  const { baseURL } = openaiResolution.credentials;
+  if (typeof baseURL !== "string") {
+    return false;
+  }
+
+  return baseURL.trim() !== "";
+};
+
+const shouldAttachChatGPTResolution = (resolutions: ProviderResolutionMap): boolean =>
+  !hasConfiguredOpenAIBaseURL(resolutions);
+
 // ── Model resolution ───────────────────────────────────────────────────
 
 interface ResolvedProvider {
@@ -140,6 +158,7 @@ interface ResolvedProvider {
 }
 
 const buildSearchConfig = (resolution: ProviderResolution, modelID: string): SearchConfig => ({
+  accountId: resolution.credentials.accountId,
   apiKey: resolution.credentials.apiKey,
   baseURL: resolution.credentials.baseURL,
   model: modelID,
@@ -184,6 +203,13 @@ const resolveActiveModel = (
   active: ActiveModel,
   resolutions: ProviderResolutionMap,
 ): ResolvedProvider | null => {
+  if (activeType === "openai" && resolutions.chatgpt) {
+    return {
+      config: buildSearchConfig(resolutions.chatgpt, active.modelID),
+      providerType: "chatgpt",
+    };
+  }
+
   const resolution = resolutions[activeType];
   if (!resolution) {
     return null;
@@ -254,6 +280,21 @@ const resolveProviderState = async (
   const list = data.providers as ProviderData[];
   const resolutions = resolveFromProviders(list);
 
+  const chatgptCredentials = await resolveChatGPTCredentials(client, directory);
+  if (chatgptCredentials && shouldAttachChatGPTResolution(resolutions)) {
+    const modelOverrides = resolveModelOverrides(list, "openai");
+    resolutions.chatgpt = {
+      credentials: {
+        accountId: chatgptCredentials.accountId,
+        apiKey: chatgptCredentials.apiKey,
+        baseURL: chatgptCredentials.baseURL,
+      },
+      fallbackModel: modelOverrides.fallbackModel,
+      lockedModel: modelOverrides.lockedModel,
+      providerType: "chatgpt",
+    };
+  }
+
   const copilotCredentials = await resolveCopilotCredentials(client, directory);
   if (copilotCredentials) {
     const modelOverrides = resolveModelOverrides(list, "copilot");
@@ -270,6 +311,10 @@ const resolveProviderState = async (
 
 const hasAnyProvider = (resolutions: ProviderResolutionMap): boolean => {
   if (resolutions.anthropic) {
+    return true;
+  }
+
+  if (resolutions.chatgpt) {
     return true;
   }
 
