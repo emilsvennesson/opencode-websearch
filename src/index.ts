@@ -265,7 +265,7 @@ const resolveProviderState = async (
 
   const chatgptCredentials = await resolveChatGPTCredentials(client, directory);
   if (chatgptCredentials) {
-    const modelOverrides = resolveModelOverrides(list, "chatgpt");
+    const modelOverrides = resolveModelOverrides(list, "openai");
     resolutions.chatgpt = {
       credentials: {
         accountId: chatgptCredentials.accountId,

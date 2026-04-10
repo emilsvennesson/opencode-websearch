@@ -4,11 +4,12 @@ Web search plugin for [OpenCode](https://opencode.ai) that provides web search f
 
 ## Supported providers
 
-| Provider       | SDK package              | Search mechanism                                                                                                          | Notes                                                                                                                                                       |
-| -------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Anthropic      | `@ai-sdk/anthropic`      | [Web search tool](https://docs.anthropic.com/en/docs/build-with-claude/tool-use/web-search-tool)                          | This plugin uses Anthropic tool type `web_search_20250305`; model compatibility follows that tool version.                                                     |
-| OpenAI         | `@ai-sdk/openai`         | [Responses API web search](https://platform.openai.com/docs/guides/tools-web-search)                                      | Known unsupported: `gpt-4.1-nano`, and `gpt-5` with `reasoning.effort: "minimal"`.                                                                        |
-| GitHub Copilot | `@ai-sdk/github-copilot` | [Copilot model-native web search](https://github.blog/changelog/2026-02-25-improved-web-search-in-copilot-on-github-com/) | Requires `Copilot can search the web using model native search` to be enabled in GitHub Copilot settings. OpenAI-family models are working here; Claude models do not appear to work with Copilot built-in model-native search capabilities. |
+| Provider                 | SDK package              | Search mechanism                                                                                                          | Notes                                                                                                                                                       |
+| ------------------------ | ------------------------ | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Anthropic                | `@ai-sdk/anthropic`      | [Web search tool](https://docs.anthropic.com/en/docs/build-with-claude/tool-use/web-search-tool)                        | This plugin uses Anthropic tool type `web_search_20250305`; model compatibility follows that tool version.                                                 |
+| OpenAI (API key)         | `@ai-sdk/openai`         | [Responses API web search](https://platform.openai.com/docs/guides/tools-web-search)                                    | Uses OpenAI API billing. Known unsupported: `gpt-4.1-nano`, and `gpt-5` with `reasoning.effort: "minimal"`.                                             |
+| OpenAI (ChatGPT OAuth)   | OpenCode OpenAI OAuth    | ChatGPT Codex Responses stream (`https://chatgpt.com/backend-api/codex/responses`)                                      | Uses ChatGPT Plus/Pro OAuth via `/connect`. Preferred over OpenAI API-key routing for OpenAI models when both are available.                              |
+| GitHub Copilot           | `@ai-sdk/github-copilot` | [Copilot model-native web search](https://github.blog/changelog/2026-02-25-improved-web-search-in-copilot-on-github-com/) | Requires `Copilot can search the web using model native search` to be enabled in GitHub Copilot settings. OpenAI-family models are working here; Claude models do not appear to work with Copilot built-in model-native search capabilities. |
 
 These limitations are based on current provider docs and can change over time.
 
@@ -29,6 +30,15 @@ OpenCode will install it automatically at startup.
 No configuration is needed if your active chat model supports the provider's native web search capability used by this plugin. To customize which model handles web searches, tag a model with `"websearch": "auto"` or `"websearch": "always"`.
 
 Important: `"auto"` is a provider-level fallback, not a model-level fallback.
+
+### OpenAI auth modes
+
+For OpenAI models, this plugin supports two credential modes:
+
+- OpenAI API key from your OpenCode provider config
+- ChatGPT Plus/Pro OAuth from OpenCode `/connect`
+
+If both are available, ChatGPT OAuth is preferred for OpenAI-model web searches.
 
 ### Model selection
 

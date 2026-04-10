@@ -14,7 +14,7 @@ interface ProviderRule {
 
 // ── Constants ──────────────────────────────────────────────────────────
 
-const RESOLUTION_PRIORITY: ProviderType[] = ["anthropic", "openai", "chatgpt", "copilot"];
+const RESOLUTION_PRIORITY: ProviderType[] = ["anthropic", "chatgpt", "openai", "copilot"];
 
 const PROVIDER_RULES: ProviderRule[] = [
   {

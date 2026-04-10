@@ -228,9 +228,9 @@ const resolveCopilotModelHint = (): string =>
   "gpt-5.3-codex, gpt-5.2-codex, gpt-5.2, gpt-5.1, gpt-5.4-mini";
 
 const formatNoProviderError = (): string =>
-  `Error: web-search requires an Anthropic, OpenAI, or GitHub Copilot provider.
+  `Error: web-search requires an Anthropic, OpenAI (API key or ChatGPT OAuth), or GitHub Copilot provider.
 
-No supported provider with a valid API key was found in your opencode.json configuration.
+No supported provider credentials (API key or OAuth) were found.
 
 To fix this, add an Anthropic or OpenAI provider to your opencode.json:
 
@@ -258,7 +258,7 @@ Or:
 
 Steps:
 1. Open your opencode.json (project root, .opencode/, or ~/.config/opencode/)
-2. Ensure you have an Anthropic/OpenAI provider configured with a valid API key, or active GitHub Copilot auth
+2. Ensure you have an Anthropic/OpenAI provider configured with a valid API key, or active OpenAI ChatGPT OAuth/Copilot auth
 3. Restart OpenCode to pick up the configuration change`;
 
 const formatUnsupportedProviderError = (activeModelID: string): string =>
