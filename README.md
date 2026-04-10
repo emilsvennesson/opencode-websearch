@@ -4,6 +4,22 @@ Native web search for [OpenCode](https://opencode.ai), powered by your model's b
 
 Inspired by Claude Code's WebSearch tool.
 
+## Example
+
+Asking OpenCode about the latest PostgreSQL version:
+
+> **What's the latest Postgres version?**
+>
+> ⚙ `web-search` [query=latest PostgreSQL release version April 2026]
+>
+> As of now (April 2026), the latest PostgreSQL community release is PostgreSQL 18.3.  
+> If you mean the latest major version line, that is PostgreSQL 18.
+>
+> Sources:
+>
+> - [PostgreSQL Roadmap](https://www.postgresql.org/developer/roadmap/)
+> - [PostgreSQL News Archive (2026-02-26 release)](https://www.postgresql.org/about/newsarchive/-/20260226/)
+
 ## Supported providers
 
 | Provider         | What you need                                                            |
