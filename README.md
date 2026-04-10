@@ -1,20 +1,22 @@
 # opencode-websearch
 
-Web search plugin for [OpenCode](https://opencode.ai) that provides web search functionality using each provider's native APIs, inspired by Claude Code's WebSearch tool.
+Native web search for [OpenCode](https://opencode.ai), powered by your model's built-in search capability. No extra API keys or search services required. If you're on a supported provider, it works without any extra setup.
+
+Inspired by Claude Code's WebSearch tool.
 
 ## Supported providers
 
-| Provider                 | SDK package              | Search mechanism                                                                                                          | Notes                                                                                                                                                       |
-| ------------------------ | ------------------------ | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Anthropic                | `@ai-sdk/anthropic`      | [Web search tool](https://docs.anthropic.com/en/docs/build-with-claude/tool-use/web-search-tool)                        | This plugin uses Anthropic tool type `web_search_20250305`; model compatibility follows that tool version.                                                 |
-| ChatGPT/OpenAI           | `@ai-sdk/openai`         | [Responses API web search](https://platform.openai.com/docs/guides/tools-web-search)                                    | Supports ChatGPT Plus/Pro OAuth via `/connect` and OpenAI API keys. For OpenAI-family model web search, this plugin uses ChatGPT OAuth when it is available, except when you configure a custom OpenAI-compatible `baseURL` (for example Azure/proxy/local gateway). Known unsupported: `gpt-4.1-nano`, and `gpt-5` with `reasoning.effort: "minimal"`. |
-| GitHub Copilot           | `@ai-sdk/github-copilot` | [Copilot model-native web search](https://github.blog/changelog/2026-02-25-improved-web-search-in-copilot-on-github-com/) | Requires `Copilot can search the web using model native search` to be enabled in GitHub Copilot settings. OpenAI-family models are working here; Claude models do not appear to work with Copilot built-in model-native search capabilities. |
+| Provider         | What you need                                                            |
+| ---------------- | ------------------------------------------------------------------------ |
+| Anthropic        | An Anthropic provider/model in OpenCode with built-in web search support |
+| OpenAI / ChatGPT | OpenAI configured in OpenCode (API key or ChatGPT connected)             |
+| GitHub Copilot   | GitHub Copilot connected in OpenCode                                     |
 
-These limitations are based on current provider docs and can change over time.
+Model-level web search support depends on the provider and model you use.
 
 ## Install
 
-Add the plugin to your `opencode.json`:
+Add the plugin to your `opencode.json` and OpenCode will install it automatically on startup.
 
 ```json
 {
@@ -22,52 +24,21 @@ Add the plugin to your `opencode.json`:
 }
 ```
 
-OpenCode will install it automatically at startup.
-
 ## Configuration (optional)
 
-No configuration is needed if your active chat model supports the provider's native web search capability used by this plugin. To customize which model handles web searches, tag a model with `"websearch": "auto"` or `"websearch": "always"`.
+By default the plugin uses your active model. The optional `"websearch"` flag lets you pin or provide a fallback model for search:
 
-Important: `"auto"` is a provider-level fallback, not a model-level fallback.
+- `"always"`: always use this model for web search
+- `"auto"`: use this model as fallback when your active provider is not supported
 
-### Model selection
+### Selection order
 
-The plugin chooses which model to use for each search:
+1. A model tagged `"websearch": "always"`
+2. Your active model (if on a supported provider)
+3. A model tagged `"websearch": "auto"`
+4. Otherwise, the tool returns an error
 
-| Priority | Condition                                                           | Behavior                                                               |
-| -------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| 1        | A model is tagged `"always"`                                        | That model is **always** used, regardless of what you're chatting with |
-| 2        | Active model is on a supported and configured provider              | The active model is used for web search                                |
-| 3        | Active model is on an unsupported provider, and a model is `"auto"` | The `"auto"` model is used as fallback                                |
-| 4        | None of the above                                                   | An error is returned                                                   |
-
-### `"auto"` mode (fallback)
-
-Use `"auto"` to set a fallback model when your active model is on an unsupported provider.
-
-If your active model is on a supported provider, that active model is used, even if that specific model does not support web search.
-
-If you want one model to always handle web search, use `"always"`.
-
-```json
-{
-  "provider": {
-    "anthropic": {
-      "models": {
-        "claude-sonnet-4-5": {
-          "options": {
-            "websearch": "auto"
-          }
-        }
-      }
-    }
-  }
-}
-```
-
-### `"always"` mode
-
-Use `"always"` to lock web search to a specific model, regardless of what you're chatting with.
+### Example
 
 ```json
 {
@@ -87,10 +58,9 @@ Use `"always"` to lock web search to a specific model, regardless of what you're
 
 ## Development
 
-### Local Development
+### Local development
 
-To develop or customize the plugin locally, clone the repo and symlink the
-source entry point into your OpenCode plugin directory:
+Clone the repo and symlink the source entry into your OpenCode plugin directory:
 
 ```sh
 git clone https://github.com/emilsvennesson/opencode-websearch ~/.config/opencode/opencode-websearch
@@ -100,23 +70,21 @@ mkdir -p ~/.config/opencode/plugin
 ln -sf ~/.config/opencode/opencode-websearch/src/index.ts ~/.config/opencode/plugin/websearch.ts
 ```
 
-OpenCode will load the plugin directly from source on startup. Any edits to the
-files in `src/` take effect next time you start OpenCode.
+OpenCode loads the plugin directly from source at startup.
 
-> **Note:** When using the symlink approach, remove `"opencode-websearch"` from
-> the `plugin` array in your `opencode.json` to avoid loading the plugin twice.
+> When using this symlink setup, remove `"opencode-websearch"` from the `plugin` array in `opencode.json` to avoid loading it twice.
 
 ### Commands
 
 ```sh
-bun install            # install dependencies
-bun run format         # auto-format source files
-bun run format:check   # verify formatting (no changes)
-bun run lint           # run oxlint
-bun run lint:fix       # auto-fix lint issues
-bun run typecheck      # type check with tsc
-bun run check          # format:check + lint + typecheck (full quality gate)
-bun run build          # ESM bundle + declaration files → dist/
+bun install
+bun run format
+bun run format:check
+bun run lint
+bun run lint:fix
+bun run typecheck
+bun run check
+bun run build
 ```
 
 ## License
