@@ -26,6 +26,7 @@ import {
 // ── Constants ──────────────────────────────────────────────────────────
 
 const MIN_QUERY_LENGTH = 2;
+const OPENAI_DEFAULT_BASE_URL = "https://api.openai.com";
 
 // ── Provider detection ─────────────────────────────────────────────────
 
@@ -131,6 +132,28 @@ const detectActiveProviderType = (
   }
 
   return detectProviderTypeFromProviderID(active.providerID);
+};
+
+const normalizeOpenAIBaseURL = (baseURL: string): string =>
+  baseURL.replace(/\/v1\/?$/, "").replace(/\/$/, "");
+
+const isDefaultOpenAIBaseURL = (baseURL: string | undefined): boolean => {
+  if (!baseURL) {
+    return true;
+  }
+
+  const normalizedBaseURL = normalizeOpenAIBaseURL(baseURL);
+
+  return normalizedBaseURL === OPENAI_DEFAULT_BASE_URL;
+};
+
+const shouldAttachChatGPTResolution = (resolutions: ProviderResolutionMap): boolean => {
+  const openaiResolution = resolutions.openai;
+  if (!openaiResolution) {
+    return true;
+  }
+
+  return isDefaultOpenAIBaseURL(openaiResolution.credentials.baseURL);
 };
 
 // ── Model resolution ───────────────────────────────────────────────────
@@ -264,7 +287,7 @@ const resolveProviderState = async (
   const resolutions = resolveFromProviders(list);
 
   const chatgptCredentials = await resolveChatGPTCredentials(client, directory);
-  if (chatgptCredentials) {
+  if (chatgptCredentials && shouldAttachChatGPTResolution(resolutions)) {
     const modelOverrides = resolveModelOverrides(list, "openai");
     resolutions.chatgpt = {
       credentials: {

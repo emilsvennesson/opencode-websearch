@@ -34,10 +34,11 @@ interface ScanResult {
 
 interface ScanState {
   anthropic: ScanResult;
-  chatgpt: ScanResult;
   copilot: ScanResult;
   openai: ScanResult;
 }
+
+type ScannableProviderType = Exclude<ProviderType, "chatgpt">;
 
 // ── Constants ──────────────────────────────────────────────────────────
 
@@ -94,10 +95,19 @@ const extractCredentials = (
 
 const createInitialScanState = (): ScanState => ({
   anthropic: { credentials: null },
-  chatgpt: { credentials: null },
   copilot: { credentials: null },
   openai: { credentials: null },
 });
+
+const isScannableProviderType = (
+  providerType: ProviderType,
+): providerType is ScannableProviderType => {
+  if (providerType === "chatgpt") {
+    return false;
+  }
+
+  return true;
+};
 
 const updateModelsFromWebsearchOption = (scan: ScanResult, model: ProviderModel): void => {
   const option = getWebsearchOption(model);
@@ -117,6 +127,10 @@ const processProviderModel = (
 ): void => {
   const providerType = detectProviderTypeFromModel(model);
   if (!providerType) {
+    return;
+  }
+
+  if (!isScannableProviderType(providerType)) {
     return;
   }
 
@@ -146,7 +160,7 @@ const scanProviders = (providers: ProviderData[]): ScanState => {
 
 const buildResolution = (
   scan: ScanResult,
-  providerType: ProviderType,
+  providerType: ScannableProviderType,
 ): ProviderResolution | null => {
   if (!scan.credentials) {
     return null;
@@ -166,11 +180,6 @@ const buildResolutionMap = (state: ScanState): ProviderResolutionMap => {
   const anthropic = buildResolution(state.anthropic, "anthropic");
   if (anthropic) {
     result.anthropic = anthropic;
-  }
-
-  const chatgpt = buildResolution(state.chatgpt, "chatgpt");
-  if (chatgpt) {
-    result.chatgpt = chatgpt;
   }
 
   const openai = buildResolution(state.openai, "openai");
@@ -195,7 +204,7 @@ const buildModelOverrides = (scan: ScanResult): ProviderModelOverrides => ({
 
 const resolveModelOverrides = (
   providers: ProviderData[],
-  providerType: ProviderType,
+  providerType: ScannableProviderType,
 ): ProviderModelOverrides => {
   const state = scanProviders(providers);
 
