@@ -19,7 +19,7 @@ import { resolveCopilotCredentials } from "./providers/copilot/auth.js";
 import { dispatchErrorMessage, dispatchSearch } from "./providers/index.js";
 import {
   RESOLUTION_PRIORITY,
-  detectProviderTypeFromNpm,
+  detectProviderTypeFromModel,
   detectProviderTypeFromProviderID,
 } from "./providers/registry.js";
 
@@ -29,11 +29,20 @@ const MIN_QUERY_LENGTH = 2;
 
 // ── Provider detection ─────────────────────────────────────────────────
 
-const detectUniformProviderType = (models: ProviderData["models"]): ProviderType | null => {
+const detectTypeFromProviderModel = (
+  provider: ProviderData,
+  model: ProviderData["models"][string],
+): ProviderType | null =>
+  detectProviderTypeFromModel({
+    model,
+    providerID: provider.id,
+  });
+
+const detectUniformProviderType = (provider: ProviderData): ProviderType | null => {
   let detectedType: ProviderType | null = null;
 
-  for (const model of Object.values(models)) {
-    const modelType = detectProviderTypeFromNpm(model.api.npm);
+  for (const model of Object.values(provider.models)) {
+    const modelType = detectTypeFromProviderModel(provider, model);
     if (!modelType) {
       continue;
     }
@@ -52,21 +61,21 @@ const detectUniformProviderType = (models: ProviderData["models"]): ProviderType
 };
 
 const detectProviderTypeFromProviderModels = (
-  models: ProviderData["models"],
+  provider: ProviderData,
   activeModelID: string,
 ): ProviderType | null => {
-  for (const model of Object.values(models)) {
+  for (const model of Object.values(provider.models)) {
     if (model.id !== activeModelID) {
       continue;
     }
 
-    const modelType = detectProviderTypeFromNpm(model.api.npm);
+    const modelType = detectTypeFromProviderModel(provider, model);
     if (modelType) {
       return modelType;
     }
   }
 
-  return detectUniformProviderType(models);
+  return detectUniformProviderType(provider);
 };
 
 const detectTypeFromActiveProvider = (
@@ -78,7 +87,7 @@ const detectTypeFromActiveProvider = (
       continue;
     }
 
-    const modelsType = detectProviderTypeFromProviderModels(provider.models, active.modelID);
+    const modelsType = detectProviderTypeFromProviderModels(provider, active.modelID);
     if (modelsType) {
       return modelsType;
     }
@@ -102,7 +111,7 @@ const detectTypeFromAnyModelMatch = (
         continue;
       }
 
-      const modelType = detectProviderTypeFromNpm(model.api.npm);
+      const modelType = detectTypeFromProviderModel(provider, model);
       if (modelType) {
         return modelType;
       }
@@ -319,6 +328,10 @@ const hasAnyProvider = (resolutions: ProviderResolutionMap): boolean => {
   }
 
   if (resolutions.openai) {
+    return true;
+  }
+
+  if (resolutions.moonshot) {
     return true;
   }
 

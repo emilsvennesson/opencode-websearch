@@ -16,7 +16,10 @@ interface ProviderData {
 }
 
 interface ProviderModel {
-  api: { npm: string };
+  api: {
+    npm: string;
+    url?: string;
+  };
   id: string;
   options: Record<string, unknown>;
 }
@@ -35,6 +38,7 @@ interface ScanResult {
 interface ScanState {
   anthropic: ScanResult;
   copilot: ScanResult;
+  moonshot: ScanResult;
   openai: ScanResult;
 }
 
@@ -66,36 +70,69 @@ const extractApiKey = (options: Record<string, unknown>): string | undefined => 
   return options.apiKey;
 };
 
-const extractBaseURL = (
-  options: Record<string, unknown>,
-  providerType: ProviderType,
-): string | undefined => {
+const extractConfiguredBaseURL = (options: Record<string, unknown>): string | undefined => {
   if (typeof options.baseURL !== "string") {
     return undefined;
-  }
-
-  if (providerType === "anthropic") {
-    return normalizeBaseURL(options.baseURL);
   }
 
   return options.baseURL;
 };
 
+const normalizeProviderBaseURL = (providerType: ProviderType, baseURL: string): string => {
+  if (providerType === "anthropic") {
+    return normalizeBaseURL(baseURL);
+  }
+
+  return baseURL;
+};
+
+const extractModelBaseURL = (model: ProviderModel): string | undefined => {
+  if (typeof model.api.url !== "string") {
+    return undefined;
+  }
+
+  return model.api.url;
+};
+
+const resolveBaseURL = (
+  provider: ProviderData,
+  providerType: ProviderType,
+  model: ProviderModel,
+): string | undefined => {
+  const configuredBaseURL = extractConfiguredBaseURL(provider.options);
+  if (configuredBaseURL) {
+    return normalizeProviderBaseURL(providerType, configuredBaseURL);
+  }
+
+  const modelBaseURL = extractModelBaseURL(model);
+  if (!modelBaseURL) {
+    return undefined;
+  }
+
+  if (providerType === "anthropic") {
+    return normalizeBaseURL(modelBaseURL);
+  }
+
+  return modelBaseURL;
+};
+
 const extractCredentials = (
   provider: ProviderData,
   providerType: ProviderType,
+  model: ProviderModel,
 ): ProviderCredentials | null => {
   const apiKey = provider.key ?? extractApiKey(provider.options);
   if (!apiKey) {
     return null;
   }
 
-  return { apiKey, baseURL: extractBaseURL(provider.options, providerType) };
+  return { apiKey, baseURL: resolveBaseURL(provider, providerType, model) };
 };
 
 const createInitialScanState = (): ScanState => ({
   anthropic: { credentials: null },
   copilot: { credentials: null },
+  moonshot: { credentials: null },
   openai: { credentials: null },
 });
 
@@ -125,7 +162,10 @@ const processProviderModel = (
   model: ProviderModel,
   state: ScanState,
 ): void => {
-  const providerType = detectProviderTypeFromModel(model);
+  const providerType = detectProviderTypeFromModel({
+    model,
+    providerID: provider.id,
+  });
   if (!providerType) {
     return;
   }
@@ -135,8 +175,11 @@ const processProviderModel = (
   }
 
   const scan = state[providerType];
+  const candidate = extractCredentials(provider, providerType, model);
   if (!scan.credentials) {
-    scan.credentials = extractCredentials(provider, providerType);
+    scan.credentials = candidate;
+  } else if (!scan.credentials.baseURL && candidate?.baseURL) {
+    scan.credentials = { ...scan.credentials, baseURL: candidate.baseURL };
   }
 
   updateModelsFromWebsearchOption(scan, model);
@@ -187,6 +230,11 @@ const buildResolutionMap = (state: ScanState): ProviderResolutionMap => {
     result.openai = openai;
   }
 
+  const moonshot = buildResolution(state.moonshot, "moonshot");
+  if (moonshot) {
+    result.moonshot = moonshot;
+  }
+
   const copilot = buildResolution(state.copilot, "copilot");
   if (copilot) {
     result.copilot = copilot;
@@ -212,7 +260,7 @@ const resolveModelOverrides = (
 };
 
 /**
- * Scan providers for Anthropic, OpenAI, and GitHub Copilot credentials
+ * Scan providers for Anthropic, OpenAI, Moonshot, and GitHub Copilot credentials
  * and any websearch-tagged models.
  *
  * Resolution priority (per provider):
@@ -231,17 +279,17 @@ const resolveFromProviders = (providers: ProviderData[]): ProviderResolutionMap 
 // ── Error formatting ───────────────────────────────────────────────────
 
 const resolveGeneralModelHint = (): string =>
-  "claude-sonnet-4-6, claude-opus-4-6, gpt-5.4, gpt-5.4-mini";
+  "claude-sonnet-4-6, claude-opus-4-6, gpt-5.4, gpt-5.4-mini, kimi-k2.6";
 
 const resolveCopilotModelHint = (): string =>
   "gpt-5.3-codex, gpt-5.2-codex, gpt-5.2, gpt-5.1, gpt-5.4-mini";
 
 const formatNoProviderError = (): string =>
-  `Error: web-search requires an Anthropic, OpenAI (API key or ChatGPT OAuth), or GitHub Copilot provider.
+  `Error: web-search requires an Anthropic, OpenAI (API key or ChatGPT OAuth), Moonshot, or GitHub Copilot provider.
 
 No supported provider credentials (API key or OAuth) were found.
 
-To fix this, add an Anthropic or OpenAI provider to your opencode.json:
+To fix this, add an Anthropic, OpenAI, or Moonshot provider to your opencode.json:
 
 {
   "provider": {
@@ -265,15 +313,27 @@ Or:
   }
 }
 
+Or:
+
+{
+  "provider": {
+    "moonshot": {
+      "options": {
+        "apiKey": "{env:MOONSHOT_API_KEY}"
+      }
+    }
+  }
+}
+
 Steps:
 1. Open your opencode.json (project root, .opencode/, or ~/.config/opencode/)
-2. Ensure you have an Anthropic/OpenAI provider configured with a valid API key, or active OpenAI ChatGPT OAuth/Copilot auth
+2. Ensure you have an Anthropic/OpenAI/Moonshot provider configured with a valid API key, or active OpenAI ChatGPT OAuth/Copilot auth
 3. Restart OpenCode to pick up the configuration change`;
 
 const formatUnsupportedProviderError = (activeModelID: string): string =>
   `Error: your current model (${activeModelID}) does not support web search.
 
-Web search requires an Anthropic, OpenAI, or GitHub Copilot web-search-capable model.
+Web search requires an Anthropic, OpenAI, Moonshot, or GitHub Copilot web-search-capable model.
 
 Known Copilot models that work with web search today include: ${resolveCopilotModelHint()}.
 

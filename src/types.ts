@@ -13,7 +13,7 @@ interface ProviderCredentials {
 /**
  * Identifies which provider type a resolution belongs to.
  */
-type ProviderType = "anthropic" | "chatgpt" | "copilot" | "openai";
+type ProviderType = "anthropic" | "chatgpt" | "copilot" | "moonshot" | "openai";
 
 /**
  * Fully resolved config for a single web search call:
@@ -47,6 +47,7 @@ interface ProviderResolutionMap {
   anthropic?: ProviderResolution;
   chatgpt?: ProviderResolution;
   copilot?: ProviderResolution;
+  moonshot?: ProviderResolution;
   openai?: ProviderResolution;
 }
 

@@ -12,6 +12,10 @@ import {
   formatErrorMessage as formatCopilotError,
 } from "./copilot/index.js";
 import {
+  executeSearch as executeMoonshotSearch,
+  formatErrorMessage as formatMoonshotError,
+} from "./moonshot/index.js";
+import {
   executeSearch as executeOpenAISearch,
   formatErrorMessage as formatOpenAIError,
 } from "./openai/index.js";
@@ -37,6 +41,10 @@ const PROVIDER_ADAPTERS: Record<ProviderType, ProviderAdapter> = {
   copilot: {
     executeSearch: executeCopilotSearch,
     formatErrorMessage: formatCopilotError,
+  },
+  moonshot: {
+    executeSearch: executeMoonshotSearch,
+    formatErrorMessage: formatMoonshotError,
   },
   openai: {
     executeSearch: executeOpenAISearch,

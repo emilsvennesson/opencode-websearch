@@ -6,6 +6,7 @@ import { SearchConfig, SearchHit } from "../../types.js";
 // ── Types ──────────────────────────────────────────────────────────────
 
 type ResponseFunctionWebSearch = OpenAI.Responses.ResponseFunctionWebSearch;
+type ChatCompletionMessage = OpenAI.ChatCompletionMessage;
 type ResponseOutputItem = OpenAI.Responses.ResponseOutputItem;
 type ResponseOutputMessage = OpenAI.Responses.ResponseOutputMessage;
 type ResponseOutputText = OpenAI.Responses.ResponseOutputText;
@@ -74,6 +75,19 @@ const resolveOutputText = (outputText: string, items: ResponseOutputItem[]): str
   }
 
   return textParts.join("\n\n");
+};
+
+const resolveChatCompletionOutputText = (message: ChatCompletionMessage): string => {
+  if (typeof message.content !== "string") {
+    return "";
+  }
+
+  const content = message.content.trim();
+  if (content.length === EMPTY_LENGTH) {
+    return "";
+  }
+
+  return content;
 };
 
 // ── Search hit extraction ──────────────────────────────────────────────
@@ -161,9 +175,31 @@ const collectUniqueAnnotationAndSourceHits = (items: ResponseOutputItem[]): Sear
   return hits;
 };
 
+const collectUniqueChatCompletionAnnotationHits = (message: ChatCompletionMessage): SearchHit[] => {
+  const { annotations } = message;
+  if (!annotations || annotations.length === EMPTY_LENGTH) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const hits: SearchHit[] = [];
+  for (const annotation of annotations) {
+    if (annotation.type !== "url_citation") {
+      continue;
+    }
+
+    const citation = annotation.url_citation;
+    pushUniqueHit(seen, hits, citation.title, citation.url);
+  }
+
+  return hits;
+};
+
 export {
   collectUniqueAnnotationAndSourceHits,
   collectUniqueAnnotationHits,
+  collectUniqueChatCompletionAnnotationHits,
   createOpenAICompatibleClient,
+  resolveChatCompletionOutputText,
   resolveOutputText,
 };
