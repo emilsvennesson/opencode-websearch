@@ -1,7 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join, sep } from "node:path";
-
 import { COPILOT_DEFAULT_BASE_URL } from "./constants.js";
+import { PathClient, readAuthEntry } from "../shared/auth.js";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -16,38 +14,29 @@ interface CopilotCredentials {
   baseURL?: string;
 }
 
-interface PathClient {
-  path: {
-    get: (options?: { query?: { directory?: string } }) => Promise<{ data?: { state?: string } }>;
-  };
-}
-
 // ── Constants ──────────────────────────────────────────────────────────
 
-const AUTH_FILE_NAME = "auth.json";
 const COPILOT_AUTH_KEY = "github-copilot";
-const EMPTY_LENGTH = 0;
-const OPENCODE_DIR = "opencode";
-const REMOVE_LAST_CHARACTER = -1;
-const SHARE_DIR = "share";
-const STATE_DIR = "state";
+const HTTP_PREFIX = "http://";
+const HTTPS_PREFIX = "https://";
+const STRIP_LAST_CHAR = -1;
+const STRING_START = 0;
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
+const stripScheme = (value: string): string => {
+  if (value.startsWith(HTTPS_PREFIX)) {
+    return value.slice(HTTPS_PREFIX.length);
+  }
+  if (value.startsWith(HTTP_PREFIX)) {
+    return value.slice(HTTP_PREFIX.length);
+  }
+  return value;
+};
+
 const normalizeDomain = (value: string): string => {
-  let domain = value.trim();
-
-  if (domain.startsWith("https://")) {
-    domain = domain.slice("https://".length);
-  } else if (domain.startsWith("http://")) {
-    domain = domain.slice("http://".length);
-  }
-
-  if (domain.endsWith("/")) {
-    domain = domain.slice(EMPTY_LENGTH, REMOVE_LAST_CHARACTER);
-  }
-
-  return domain;
+  const stripped = stripScheme(value.trim());
+  return stripped.endsWith("/") ? stripped.slice(STRING_START, STRIP_LAST_CHAR) : stripped;
 };
 
 const buildCopilotBaseURL = (enterpriseUrl: string | undefined): string => {
@@ -56,78 +45,16 @@ const buildCopilotBaseURL = (enterpriseUrl: string | undefined): string => {
   }
 
   const domain = normalizeDomain(enterpriseUrl);
-  if (domain.length === EMPTY_LENGTH) {
-    return COPILOT_DEFAULT_BASE_URL;
-  }
 
-  return `https://copilot-api.${domain}`;
-};
-
-const resolveAuthPathFromStatePath = (statePath: string | undefined): string | null => {
-  if (!statePath) {
-    return null;
-  }
-
-  const stateMarker = `${sep}${STATE_DIR}${sep}${OPENCODE_DIR}`;
-  if (!statePath.endsWith(stateMarker)) {
-    return null;
-  }
-
-  const dataMarker = `${sep}${SHARE_DIR}${sep}${OPENCODE_DIR}`;
-  const dataPath = `${statePath.slice(EMPTY_LENGTH, -stateMarker.length)}${dataMarker}`;
-  return join(dataPath, AUTH_FILE_NAME);
-};
-
-const resolveAuthPath = async (client: PathClient, directory: string): Promise<string | null> => {
-  const response = await client.path.get({ query: { directory } });
-  if (!response.data) {
-    return null;
-  }
-
-  const statePath = response.data.state;
-  if (typeof statePath !== "string") {
-    return null;
-  }
-
-  return resolveAuthPathFromStatePath(statePath);
-};
-
-const parseAuthStore = (content: string): Record<string, unknown> | null => {
-  try {
-    const parsed = JSON.parse(content) as unknown;
-    if (parsed && typeof parsed === "object") {
-      return parsed as Record<string, unknown>;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-};
-
-const readCopilotEntry = (authPath: string): CopilotAuthEntry | null => {
-  if (!existsSync(authPath)) {
-    return null;
-  }
-
-  const content = readFileSync(authPath, "utf8");
-  const authStore = parseAuthStore(content);
-  if (!authStore) {
-    return null;
-  }
-
-  const candidate = authStore[COPILOT_AUTH_KEY];
-  if (!candidate || typeof candidate !== "object") {
-    return null;
-  }
-
-  return candidate as CopilotAuthEntry;
+  return domain ? `https://copilot-api.${domain}` : COPILOT_DEFAULT_BASE_URL;
 };
 
 const buildCredentials = (entry: CopilotAuthEntry): CopilotCredentials | null => {
   if (entry.type !== "oauth") {
     return null;
   }
-  if (typeof entry.refresh !== "string" || entry.refresh.length === EMPTY_LENGTH) {
+
+  if (typeof entry.refresh !== "string" || !entry.refresh) {
     return null;
   }
 
@@ -141,17 +68,9 @@ const resolveCopilotCredentials = async (
   client: PathClient,
   directory: string,
 ): Promise<CopilotCredentials | null> => {
-  const authPath = await resolveAuthPath(client, directory);
-  if (!authPath) {
-    return null;
-  }
+  const entry = await readAuthEntry<CopilotAuthEntry>(client, directory, COPILOT_AUTH_KEY);
 
-  const entry = readCopilotEntry(authPath);
-  if (!entry) {
-    return null;
-  }
-
-  return buildCredentials(entry);
+  return entry ? buildCredentials(entry) : null;
 };
 
 export { resolveCopilotCredentials };

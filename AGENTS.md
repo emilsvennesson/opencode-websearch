@@ -81,7 +81,7 @@ package.json            # Bun-based project, ESM module
 
 ### Control flow
 
-- **No ternary expressions.** Use `if`/`else` blocks.
+- Ternary expressions are allowed when they make code clearer. Use `if`/`else` blocks for multi-statement branches.
 - Always use **braces** with `if`/`else`/`for`/`while` (enforced by `curly`).
 - Prefer `continue` in loops to skip irrelevant iterations and reduce nesting.
 
@@ -130,7 +130,7 @@ oxlint with plugins: `unicorn`, `typescript`, `import`, `oxc`.
 Key rules that shape the code:
 
 - `no-magic-numbers`, `max-statements` (20), `max-params` (5)
-- `no-ternary`, `curly`, `sort-keys`, `sort-imports`
+- `curly`, `sort-keys`, `sort-imports`
 - `func-style` (expressions only), `init-declarations`, `id-length` (min 2)
 - `unicorn/catch-error-name`, `unicorn/text-encoding-identifier-case`
 - `typescript/no-unused-vars` (error)
@@ -142,7 +142,7 @@ Disabled rules (with rationale):
 - `unicorn/filename-case` -- PascalCase not enforced on filenames
 - `unicorn/prevent-abbreviations` -- short names like `ctx`, `env`, `url` are clear
 - `no-continue` -- `continue` is cleaner than empty if-branches or deep nesting in loops
-- `unicorn/prefer-ternary` -- conflicts with `no-ternary`
+- `unicorn/prefer-ternary` -- ternaries are allowed but not required
 - `import/no-nodejs-modules` -- this is a Node.js plugin; fs/os/path are required
 - `import/no-named-export` -- internal modules use named exports
 - `import/prefer-default-export` -- internal modules use named exports, not default

@@ -1,352 +1,150 @@
-import {
-  ActiveModel,
-  ProviderResolution,
-  ProviderResolutionMap,
-  ProviderType,
-  SearchConfig,
-} from "./types.js";
-import { Plugin, tool } from "@opencode-ai/plugin";
+import { ActiveModel, ProviderResolution, ProviderResolutionMap, ProviderType } from "./types.js";
+import { Plugin, PluginInput, tool } from "@opencode-ai/plugin";
 import {
   ProviderData,
+  buildResolutionMap,
   formatNoProviderError,
   formatUnsupportedProviderError,
-  resolveFromProviders,
-  resolveModelOverrides,
+  scanProviders,
 } from "./config.js";
+import { RESOLUTION_PRIORITY, detectProviderType } from "./providers/registry.js";
+import { dispatchErrorMessage, dispatchSearch } from "./providers/index.js";
 import { getCurrentMonthYear } from "./helpers.js";
 import { resolveChatGPTCredentials } from "./providers/chatgpt/auth.js";
 import { resolveCopilotCredentials } from "./providers/copilot/auth.js";
-import { dispatchErrorMessage, dispatchSearch } from "./providers/index.js";
-import {
-  RESOLUTION_PRIORITY,
-  detectProviderTypeFromModel,
-  detectProviderTypeFromProviderID,
-} from "./providers/registry.js";
 
 // ── Constants ──────────────────────────────────────────────────────────
 
 const MIN_QUERY_LENGTH = 2;
+const NO_PROVIDERS = 0;
+
+// ── Types ──────────────────────────────────────────────────────────────
+
+interface PickedModel {
+  modelID: string;
+  resolution: ProviderResolution;
+  type: ProviderType;
+}
 
 // ── Provider detection ─────────────────────────────────────────────────
 
-const detectTypeFromProviderModel = (
-  provider: ProviderData,
-  model: ProviderData["models"][string],
-): ProviderType | null =>
-  detectProviderTypeFromModel({
-    model,
-    providerID: provider.id,
-  });
-
-const detectUniformProviderType = (provider: ProviderData): ProviderType | null => {
-  let detectedType: ProviderType | null = null;
-
-  for (const model of Object.values(provider.models)) {
-    const modelType = detectTypeFromProviderModel(provider, model);
-    if (!modelType) {
-      continue;
-    }
-
-    if (!detectedType) {
-      detectedType = modelType;
-      continue;
-    }
-
-    if (detectedType !== modelType) {
-      return null;
-    }
-  }
-
-  return detectedType;
-};
-
-const detectProviderTypeFromProviderModels = (
-  provider: ProviderData,
-  activeModelID: string,
-): ProviderType | null => {
-  for (const model of Object.values(provider.models)) {
-    if (model.id !== activeModelID) {
-      continue;
-    }
-
-    const modelType = detectTypeFromProviderModel(provider, model);
-    if (modelType) {
-      return modelType;
-    }
-  }
-
-  return detectUniformProviderType(provider);
-};
-
-const detectTypeFromActiveProvider = (
-  active: ActiveModel,
-  providers: ProviderData[],
-): ProviderType | null => {
-  for (const provider of providers) {
-    if (provider.id !== active.providerID) {
-      continue;
-    }
-
-    const modelsType = detectProviderTypeFromProviderModels(provider, active.modelID);
-    if (modelsType) {
-      return modelsType;
-    }
-
-    const providerType = detectProviderTypeFromProviderID(provider.id);
-    if (providerType) {
-      return providerType;
-    }
-  }
-
-  return null;
-};
-
-const detectTypeFromAnyModelMatch = (
-  activeModelID: string,
-  providers: ProviderData[],
-): ProviderType | null => {
-  for (const provider of providers) {
-    for (const model of Object.values(provider.models)) {
-      if (model.id !== activeModelID) {
-        continue;
-      }
-
-      const modelType = detectTypeFromProviderModel(provider, model);
-      if (modelType) {
-        return modelType;
-      }
-    }
-  }
-
-  return null;
-};
-
-const detectActiveProviderType = (
+/**
+ * Resolve which adapter type to use for the active model. The user is on
+ * the canonical OpenCode provider (e.g. `openai`), but if ChatGPT OAuth
+ * is present we route OpenAI traffic through the ChatGPT adapter.
+ */
+const resolveActiveType = (
   active: ActiveModel | undefined,
-  providers: ProviderData[],
+  resolutions: ProviderResolutionMap,
 ): ProviderType | null => {
   if (!active) {
     return null;
   }
 
-  const activeProviderType = detectTypeFromActiveProvider(active, providers);
-  if (activeProviderType) {
-    return activeProviderType;
-  }
+  const base = detectProviderType(active.providerID);
 
-  const modelMatchType = detectTypeFromAnyModelMatch(active.modelID, providers);
-  if (modelMatchType) {
-    return modelMatchType;
-  }
-
-  return detectProviderTypeFromProviderID(active.providerID);
+  return base === "openai" && resolutions.chatgpt ? "chatgpt" : base;
 };
-
-const hasConfiguredOpenAIBaseURL = (resolutions: ProviderResolutionMap): boolean => {
-  const openaiResolution = resolutions.openai;
-  if (!openaiResolution) {
-    return false;
-  }
-
-  const { baseURL } = openaiResolution.credentials;
-  if (typeof baseURL !== "string") {
-    return false;
-  }
-
-  return baseURL.trim() !== "";
-};
-
-const shouldAttachChatGPTResolution = (resolutions: ProviderResolutionMap): boolean =>
-  !hasConfiguredOpenAIBaseURL(resolutions);
 
 // ── Model resolution ───────────────────────────────────────────────────
 
-interface ResolvedProvider {
-  config: SearchConfig;
-  providerType: ProviderType;
-}
-
-const buildSearchConfig = (resolution: ProviderResolution, modelID: string): SearchConfig => ({
-  accountId: resolution.credentials.accountId,
-  apiKey: resolution.credentials.apiKey,
-  baseURL: resolution.credentials.baseURL,
-  model: modelID,
-});
-
-const resolveModelByPriority = (
+/**
+ * Walk providers in priority order looking for one that has the given
+ * model key (`lockedModel` or `fallbackModel`) set.
+ */
+const findModelByKey = (
   resolutions: ProviderResolutionMap,
-  modelKey: "fallbackModel" | "lockedModel",
-): ResolvedProvider | null => {
-  for (const providerType of RESOLUTION_PRIORITY) {
-    const resolution = resolutions[providerType];
-    if (!resolution) {
-      continue;
+  key: "fallbackModel" | "lockedModel",
+): PickedModel | null => {
+  for (const type of RESOLUTION_PRIORITY) {
+    const resolution = resolutions[type];
+    const modelID = resolution?.[key];
+    if (resolution && modelID) {
+      return { modelID, resolution, type };
     }
-
-    const modelID = resolution[modelKey];
-    if (!modelID) {
-      continue;
-    }
-
-    return {
-      config: buildSearchConfig(resolution, modelID),
-      providerType,
-    };
   }
 
   return null;
 };
 
 /**
- * Resolve the locked model for a given provider resolution.
- * Returns a ResolvedProvider if a locked model is set, otherwise null.
- */
-const resolveLockedModel = (resolutions: ProviderResolutionMap): ResolvedProvider | null =>
-  resolveModelByPriority(resolutions, "lockedModel");
-
-/**
- * Resolve using the active model's provider directly.
- */
-const resolveActiveModel = (
-  activeType: ProviderType,
-  active: ActiveModel,
-  resolutions: ProviderResolutionMap,
-): ResolvedProvider | null => {
-  if (activeType === "openai" && resolutions.chatgpt) {
-    return {
-      config: buildSearchConfig(resolutions.chatgpt, active.modelID),
-      providerType: "chatgpt",
-    };
-  }
-
-  const resolution = resolutions[activeType];
-  if (!resolution) {
-    return null;
-  }
-
-  return {
-    config: buildSearchConfig(resolution, active.modelID),
-    providerType: activeType,
-  };
-};
-
-/**
- * Resolve a fallback model from any provider with `"websearch": "auto"`.
- */
-const resolveFallbackModel = (resolutions: ProviderResolutionMap): ResolvedProvider | null =>
-  resolveModelByPriority(resolutions, "fallbackModel");
-
-/**
- * Determine which provider and model to use for a web search call.
+ * Pick the model and provider to use for a web search call.
  *
  * Priority:
- * 1. Locked model (`"websearch": "always"`) from any provider — always wins
- * 2. Active model if it belongs to a supported provider — use directly
- * 3. Fallback model (`"websearch": "auto"`) from any provider — when active is unsupported
- * 4. null — no usable provider/model found
+ * 1. Locked model (`"websearch": "always"`) on any provider
+ * 2. Active model if its provider is supported
+ * 3. Fallback model (`"websearch": "auto"`) on any provider
  */
-const resolveSearchProvider = (
+const pickModel = (
   resolutions: ProviderResolutionMap,
   active: ActiveModel | undefined,
   activeType: ProviderType | null,
-): ResolvedProvider | null => {
-  const locked = resolveLockedModel(resolutions);
+): PickedModel | null => {
+  const locked = findModelByKey(resolutions, "lockedModel");
   if (locked) {
     return locked;
   }
 
-  if (activeType && active) {
-    const resolved = resolveActiveModel(activeType, active, resolutions);
-    if (resolved) {
-      return resolved;
+  if (active && activeType) {
+    const resolution = resolutions[activeType];
+    if (resolution) {
+      return { modelID: active.modelID, resolution, type: activeType };
     }
   }
 
-  return resolveFallbackModel(resolutions);
+  return findModelByKey(resolutions, "fallbackModel");
 };
 
-// ── Lazy provider resolution ───────────────────────────────────────────
+// ── Resolution loading ─────────────────────────────────────────────────
 
-interface ProviderState {
-  list: ProviderData[];
-  resolutions: ProviderResolutionMap;
-}
-
-const resolveProviderState = async (
-  client: {
-    config: { providers: () => Promise<{ data?: { providers: unknown[] } }> };
-    path: {
-      get: (options?: { query?: { directory?: string } }) => Promise<{ data?: { state?: string } }>;
-    };
-  },
+const loadResolutions = async (
+  client: PluginInput["client"],
   directory: string,
-): Promise<ProviderState> => {
+): Promise<ProviderResolutionMap> => {
   const { data } = await client.config.providers();
   if (!data) {
-    return { list: [], resolutions: {} };
+    return {};
   }
 
   const list = data.providers as ProviderData[];
-  const resolutions = resolveFromProviders(list);
+  const scan = scanProviders(list);
+  const resolutions = buildResolutionMap(scan);
 
-  const chatgptCredentials = await resolveChatGPTCredentials(client, directory);
-  if (chatgptCredentials && shouldAttachChatGPTResolution(resolutions)) {
-    const modelOverrides = resolveModelOverrides(list, "openai");
+  /*
+   * ChatGPT OAuth supersedes the OpenAI provider unless the user has explicitly
+   * pointed `openai` at a custom baseURL (e.g. a proxy).
+   */
+  const chatgpt = await resolveChatGPTCredentials(client, directory);
+  const openaiBaseURL = resolutions.openai?.credentials.baseURL?.trim();
+  if (chatgpt && !openaiBaseURL) {
     resolutions.chatgpt = {
-      credentials: {
-        accountId: chatgptCredentials.accountId,
-        apiKey: chatgptCredentials.apiKey,
-        baseURL: chatgptCredentials.baseURL,
-      },
-      fallbackModel: modelOverrides.fallbackModel,
-      lockedModel: modelOverrides.lockedModel,
-      providerType: "chatgpt",
+      credentials: chatgpt,
+      fallbackModel: scan.openai.fallbackModel,
+      lockedModel: scan.openai.lockedModel,
     };
   }
 
-  const copilotCredentials = await resolveCopilotCredentials(client, directory);
-  if (copilotCredentials) {
-    const modelOverrides = resolveModelOverrides(list, "copilot");
+  /*
+   * Copilot credentials live in OpenCode's auth.json, not in opencode.json,
+   * but websearch flags can still be set on the `github-copilot` provider.
+   */
+  const copilot = await resolveCopilotCredentials(client, directory);
+  if (copilot) {
     resolutions.copilot = {
-      credentials: copilotCredentials,
-      fallbackModel: modelOverrides.fallbackModel,
-      lockedModel: modelOverrides.lockedModel,
-      providerType: "copilot",
+      credentials: copilot,
+      fallbackModel: scan.copilot.fallbackModel,
+      lockedModel: scan.copilot.lockedModel,
     };
   }
 
-  return { list, resolutions };
-};
-
-const hasAnyProvider = (resolutions: ProviderResolutionMap): boolean => {
-  if (resolutions.anthropic) {
-    return true;
-  }
-
-  if (resolutions.chatgpt) {
-    return true;
-  }
-
-  if (resolutions.openai) {
-    return true;
-  }
-
-  if (resolutions.moonshot) {
-    return true;
-  }
-
-  if (resolutions.copilot) {
-    return true;
-  }
-
-  return false;
+  return resolutions;
 };
 
 // ── Plugin ─────────────────────────────────────────────────────────────
 
 // oxlint-disable-next-line import/no-default-export -- plugin entry point requires default export
 export default (async (input) => {
-  let state: ProviderState | null = null;
+  let resolutions: ProviderResolutionMap | null = null;
   const activeModels = new Map<string, ActiveModel>();
 
   return {
@@ -388,26 +186,26 @@ IMPORTANT - Use the correct year in search queries:
   - Example: If the user asks for "latest React docs", search for "React documentation" with the current year, NOT last year`,
 
         async execute(args, context) {
-          if (!state) {
-            state = await resolveProviderState(input.client, input.directory);
-          }
-
-          if (!hasAnyProvider(state.resolutions)) {
-            return formatNoProviderError();
-          }
+          resolutions ??= await loadResolutions(input.client, input.directory);
 
           const active = activeModels.get(context.sessionID);
-          const activeType = detectActiveProviderType(active, state.list);
-          const resolved = resolveSearchProvider(state.resolutions, active, activeType);
+          const activeType = resolveActiveType(active, resolutions);
+          const picked = pickModel(resolutions, active, activeType);
 
-          if (!resolved) {
-            return formatUnsupportedProviderError(active?.modelID ?? "unknown");
+          if (!picked) {
+            return Object.keys(resolutions).length === NO_PROVIDERS
+              ? formatNoProviderError()
+              : formatUnsupportedProviderError(active?.modelID ?? "unknown");
           }
 
           try {
-            return await dispatchSearch(resolved.providerType, resolved.config, args.query);
+            return await dispatchSearch(
+              picked.type,
+              { ...picked.resolution.credentials, model: picked.modelID },
+              args.query,
+            );
           } catch (error) {
-            return dispatchErrorMessage(resolved.providerType, error);
+            return dispatchErrorMessage(picked.type, error);
           }
         },
       }),

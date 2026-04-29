@@ -5,7 +5,7 @@ import {
   EMPTY_LENGTH,
   SEARCH_SYSTEM_PROMPT,
 } from "../shared/search.js";
-import { SearchArgs, SearchConfig, SearchHit } from "../../types.js";
+import { SearchConfig, SearchHit } from "../../types.js";
 import { CHATGPT_DEFAULT_BASE_URL, CHATGPT_USER_AGENT } from "./constants.js";
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -265,9 +265,9 @@ const readStreamResponse = async (response: Response): Promise<StreamState> => {
 
 // ── Execution ──────────────────────────────────────────────────────────
 
-const executeSearch = async (config: SearchConfig, args: SearchArgs): Promise<string> => {
+const executeSearch = async (config: SearchConfig, query: string): Promise<string> => {
   const response = await fetch(resolveResponsesURL(config.baseURL), {
-    body: JSON.stringify(buildRequestBody(config, args.query)),
+    body: JSON.stringify(buildRequestBody(config, query)),
     headers: buildDefaultHeaders(config.accountId, config.apiKey),
     method: "POST",
   });
@@ -277,7 +277,7 @@ const executeSearch = async (config: SearchConfig, args: SearchArgs): Promise<st
   }
 
   const streamState = await readStreamResponse(response);
-  const structured = buildStructuredResponse(args.query, streamState.outputText, streamState.hits);
+  const structured = buildStructuredResponse(query, streamState.outputText, streamState.hits);
 
   return JSON.stringify(structured);
 };

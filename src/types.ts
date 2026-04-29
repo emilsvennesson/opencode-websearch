@@ -16,6 +16,13 @@ interface ProviderCredentials {
 type ProviderType = "anthropic" | "chatgpt" | "copilot" | "moonshot" | "openai";
 
 /**
+ * Provider types that come from scanning OpenCode provider config.
+ * `chatgpt` is excluded because it is derived from OAuth credentials
+ * read separately from `auth.json`, not from a provider entry.
+ */
+type ScannableProviderType = Exclude<ProviderType, "chatgpt">;
+
+/**
  * Fully resolved config for a single web search call:
  * credentials + the specific model to use.
  */
@@ -31,25 +38,17 @@ interface SearchConfig {
  * - `credentials`: API key + optional base URL
  * - `lockedModel`: model ID if a model has `websearch: "always"` (hard lock)
  * - `fallbackModel`: model ID if a model has `"websearch": "auto"` (soft fallback)
- * - `providerType`: which provider this resolution belongs to
  */
 interface ProviderResolution {
   credentials: ProviderCredentials;
   fallbackModel?: string;
   lockedModel?: string;
-  providerType: ProviderType;
 }
 
 /**
  * Map of provider resolutions, one per supported provider type.
  */
-interface ProviderResolutionMap {
-  anthropic?: ProviderResolution;
-  chatgpt?: ProviderResolution;
-  copilot?: ProviderResolution;
-  moonshot?: ProviderResolution;
-  openai?: ProviderResolution;
-}
+type ProviderResolutionMap = Partial<Record<ProviderType, ProviderResolution>>;
 
 // ── Active Model ───────────────────────────────────────────────────────
 
@@ -60,15 +59,6 @@ interface ProviderResolutionMap {
 interface ActiveModel {
   modelID: string;
   providerID: string;
-}
-
-// ── Tool Args ──────────────────────────────────────────────────────────
-
-/**
- * Arguments accepted by the web-search tool.
- */
-interface SearchArgs {
-  query: string;
 }
 
 // ── Structured Result Types ────────────────────────────────────────────
@@ -97,7 +87,7 @@ export {
   ProviderResolution,
   ProviderResolutionMap,
   ProviderType,
-  SearchArgs,
+  ScannableProviderType,
   SearchConfig,
   SearchHit,
   StructuredSearchResponse,
