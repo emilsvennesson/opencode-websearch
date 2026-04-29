@@ -1,13 +1,11 @@
-import { ActiveModel, ProviderResolution, ProviderResolutionMap, ProviderType } from "./types.js";
+import { ActiveModel, ProviderResolution } from "./types.js";
 import { Plugin, PluginInput, tool } from "@opencode-ai/plugin";
 import {
   ProviderData,
-  buildResolutionMap,
   formatNoProviderError,
   formatUnsupportedProviderError,
   scanProviders,
 } from "./config.js";
-import { RESOLUTION_PRIORITY, detectProviderType } from "./providers/registry.js";
 import { dispatchErrorMessage, dispatchSearch } from "./providers/index.js";
 import { getCurrentMonthYear } from "./helpers.js";
 import { resolveChatGPTCredentials } from "./providers/chatgpt/auth.js";
@@ -15,84 +13,63 @@ import { resolveCopilotCredentials } from "./providers/copilot/auth.js";
 
 // ── Constants ──────────────────────────────────────────────────────────
 
+const CANONICAL_COPILOT_ID = "github-copilot";
+const CANONICAL_OPENAI_ID = "openai";
 const MIN_QUERY_LENGTH = 2;
-const NO_PROVIDERS = 0;
+const NO_RESOLUTIONS = 0;
 
 // ── Types ──────────────────────────────────────────────────────────────
 
 interface PickedModel {
   modelID: string;
   resolution: ProviderResolution;
-  type: ProviderType;
 }
 
-// ── Provider detection ─────────────────────────────────────────────────
+// ── Lookup ─────────────────────────────────────────────────────────────
 
-/**
- * Resolve which adapter type to use for the active model. The user is on
- * the canonical OpenCode provider (e.g. `openai`), but if ChatGPT OAuth
- * is present we route OpenAI traffic through the ChatGPT adapter.
- */
-const resolveActiveType = (
-  active: ActiveModel | undefined,
-  resolutions: ProviderResolutionMap,
-): ProviderType | null => {
-  if (!active) {
-    return null;
-  }
+const findActive = (
+  active: ActiveModel,
+  resolutions: ProviderResolution[],
+): ProviderResolution | null =>
+  resolutions.find((resolution) => resolution.providerID === active.providerID) ?? null;
 
-  const base = detectProviderType(active.providerID);
-
-  return base === "openai" && resolutions.chatgpt ? "chatgpt" : base;
-};
-
-// ── Model resolution ───────────────────────────────────────────────────
-
-/**
- * Walk providers in priority order looking for one that has the given
- * model key (`lockedModel` or `fallbackModel`) set.
- */
-const findModelByKey = (
-  resolutions: ProviderResolutionMap,
+const findFirstWithKey = (
+  resolutions: ProviderResolution[],
   key: "fallbackModel" | "lockedModel",
-): PickedModel | null => {
-  for (const type of RESOLUTION_PRIORITY) {
-    const resolution = resolutions[type];
-    const modelID = resolution?.[key];
-    if (resolution && modelID) {
-      return { modelID, resolution, type };
-    }
-  }
-
-  return null;
-};
+): ProviderResolution | null => resolutions.find((resolution) => Boolean(resolution[key])) ?? null;
 
 /**
- * Pick the model and provider to use for a web search call.
+ * Pick the (model, resolution) pair to use for a web search call.
  *
  * Priority:
  * 1. Locked model (`"websearch": "always"`) on any provider
- * 2. Active model if its provider is supported
+ * 2. Active model if its provider is in the resolution list
  * 3. Fallback model (`"websearch": "auto"`) on any provider
+ *
+ * Within a tier, providers are walked in OpenCode config insertion order.
  */
 const pickModel = (
-  resolutions: ProviderResolutionMap,
+  resolutions: ProviderResolution[],
   active: ActiveModel | undefined,
-  activeType: ProviderType | null,
 ): PickedModel | null => {
-  const locked = findModelByKey(resolutions, "lockedModel");
-  if (locked) {
-    return locked;
+  const locked = findFirstWithKey(resolutions, "lockedModel");
+  if (locked?.lockedModel) {
+    return { modelID: locked.lockedModel, resolution: locked };
   }
 
-  if (active && activeType) {
-    const resolution = resolutions[activeType];
-    if (resolution) {
-      return { modelID: active.modelID, resolution, type: activeType };
+  if (active) {
+    const direct = findActive(active, resolutions);
+    if (direct) {
+      return { modelID: active.modelID, resolution: direct };
     }
   }
 
-  return findModelByKey(resolutions, "fallbackModel");
+  const fallback = findFirstWithKey(resolutions, "fallbackModel");
+  if (fallback?.fallbackModel) {
+    return { modelID: fallback.fallbackModel, resolution: fallback };
+  }
+
+  return null;
 };
 
 // ── Resolution loading ─────────────────────────────────────────────────
@@ -100,41 +77,50 @@ const pickModel = (
 const loadResolutions = async (
   client: PluginInput["client"],
   directory: string,
-): Promise<ProviderResolutionMap> => {
+): Promise<ProviderResolution[]> => {
   const { data } = await client.config.providers();
   if (!data) {
-    return {};
+    return [];
   }
 
-  const list = data.providers as ProviderData[];
-  const scan = scanProviders(list);
-  const resolutions = buildResolutionMap(scan);
+  const resolutions = scanProviders(data.providers as ProviderData[]);
 
   /*
-   * ChatGPT OAuth supersedes the OpenAI provider unless the user has explicitly
-   * pointed `openai` at a custom baseURL (e.g. a proxy).
+   * ChatGPT OAuth shadows the canonical `openai` provider when no custom
+   * baseURL is set. Custom-renamed openai-typed providers keep their own
+   * credentials because their explicit baseURL would not authenticate
+   * against ChatGPT OAuth tokens.
    */
   const chatgpt = await resolveChatGPTCredentials(client, directory);
-  const openaiBaseURL = resolutions.openai?.credentials.baseURL?.trim();
-  if (chatgpt && !openaiBaseURL) {
-    resolutions.chatgpt = {
-      credentials: chatgpt,
-      fallbackModel: scan.openai.fallbackModel,
-      lockedModel: scan.openai.lockedModel,
-    };
+  if (chatgpt) {
+    const canonical = resolutions.find(
+      (resolution) => resolution.providerID === CANONICAL_OPENAI_ID,
+    );
+    if (canonical && !canonical.credentials.baseURL) {
+      canonical.credentials = chatgpt;
+      canonical.type = "chatgpt";
+    }
   }
 
   /*
-   * Copilot credentials live in OpenCode's auth.json, not in opencode.json,
-   * but websearch flags can still be set on the `github-copilot` provider.
+   * Copilot OAuth replaces credentials on the canonical `github-copilot`
+   * resolution if present, otherwise appends a synthetic resolution so
+   * the user can still web-search via Copilot without a config entry.
    */
   const copilot = await resolveCopilotCredentials(client, directory);
   if (copilot) {
-    resolutions.copilot = {
-      credentials: copilot,
-      fallbackModel: scan.copilot.fallbackModel,
-      lockedModel: scan.copilot.lockedModel,
-    };
+    const canonical = resolutions.find(
+      (resolution) => resolution.providerID === CANONICAL_COPILOT_ID,
+    );
+    if (canonical) {
+      canonical.credentials = copilot;
+    } else {
+      resolutions.push({
+        credentials: copilot,
+        providerID: CANONICAL_COPILOT_ID,
+        type: "copilot",
+      });
+    }
   }
 
   return resolutions;
@@ -144,7 +130,7 @@ const loadResolutions = async (
 
 // oxlint-disable-next-line import/no-default-export -- plugin entry point requires default export
 export default (async (input) => {
-  let resolutions: ProviderResolutionMap | null = null;
+  let resolutions: ProviderResolution[] | null = null;
   const activeModels = new Map<string, ActiveModel>();
 
   return {
@@ -189,23 +175,22 @@ IMPORTANT - Use the correct year in search queries:
           resolutions ??= await loadResolutions(input.client, input.directory);
 
           const active = activeModels.get(context.sessionID);
-          const activeType = resolveActiveType(active, resolutions);
-          const picked = pickModel(resolutions, active, activeType);
+          const picked = pickModel(resolutions, active);
 
           if (!picked) {
-            return Object.keys(resolutions).length === NO_PROVIDERS
+            return resolutions.length === NO_RESOLUTIONS
               ? formatNoProviderError()
               : formatUnsupportedProviderError(active?.modelID ?? "unknown");
           }
 
           try {
             return await dispatchSearch(
-              picked.type,
+              picked.resolution.type,
               { ...picked.resolution.credentials, model: picked.modelID },
               args.query,
             );
           } catch (error) {
-            return dispatchErrorMessage(picked.type, error);
+            return dispatchErrorMessage(picked.resolution.type, error);
           }
         },
       }),

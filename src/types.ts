@@ -16,7 +16,7 @@ interface ProviderCredentials {
 type ProviderType = "anthropic" | "chatgpt" | "copilot" | "moonshot" | "openai";
 
 /**
- * Provider types that come from scanning OpenCode provider config.
+ * Provider types detectable from OpenCode provider config.
  * `chatgpt` is excluded because it is derived from OAuth credentials
  * read separately from `auth.json`, not from a provider entry.
  */
@@ -34,21 +34,24 @@ interface SearchConfig {
 }
 
 /**
- * The result of scanning a single provider at startup:
- * - `credentials`: API key + optional base URL
- * - `lockedModel`: model ID if a model has `websearch: "always"` (hard lock)
- * - `fallbackModel`: model ID if a model has `"websearch": "auto"` (soft fallback)
+ * One scanned provider, ready to answer a web-search call.
+ *
+ * - `providerID`: the OpenCode provider ID (e.g. `"openai"`,
+ *   `"openai-prod"`). Resolutions are matched against the active model's
+ *   `providerID` directly, allowing multiple providers of the same type
+ *   with different credentials/baseURLs to coexist.
+ * - `type`: which adapter to dispatch to. May be mutated after scanning
+ *   when ChatGPT OAuth shadows the canonical `openai` provider.
+ * - `lockedModel`: model ID if a model has `"websearch": "always"`.
+ * - `fallbackModel`: model ID if a model has `"websearch": "auto"`.
  */
 interface ProviderResolution {
   credentials: ProviderCredentials;
   fallbackModel?: string;
   lockedModel?: string;
+  providerID: string;
+  type: ProviderType;
 }
-
-/**
- * Map of provider resolutions, one per supported provider type.
- */
-type ProviderResolutionMap = Partial<Record<ProviderType, ProviderResolution>>;
 
 // ── Active Model ───────────────────────────────────────────────────────
 
@@ -85,7 +88,6 @@ export {
   ActiveModel,
   ProviderCredentials,
   ProviderResolution,
-  ProviderResolutionMap,
   ProviderType,
   ScannableProviderType,
   SearchConfig,

@@ -1,10 +1,5 @@
-import {
-  ProviderCredentials,
-  ProviderResolution,
-  ProviderResolutionMap,
-  ScannableProviderType,
-} from "./types.js";
-import { SCANNABLE_TYPES, detectProviderType } from "./providers/registry.js";
+import { ProviderResolution, ScannableProviderType } from "./types.js";
+import { detectProviderType } from "./providers/registry.js";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -17,19 +12,11 @@ interface ProviderData {
 
 interface ProviderModel {
   api: {
-    url?: string;
+    npm: string;
   };
   id: string;
   options: Record<string, unknown>;
 }
-
-interface ScanResult {
-  credentials: ProviderCredentials | null;
-  fallbackModel?: string;
-  lockedModel?: string;
-}
-
-type ScanState = Record<ScannableProviderType, ScanResult>;
 
 // ── Constants ──────────────────────────────────────────────────────────
 
@@ -49,127 +36,77 @@ const getWebsearchOption = (model: ProviderModel): string | null => {
 
 const stripV1Suffix = (url: string): string => url.replace(/\/v1\/?$/, "");
 
-const extractApiKey = (options: Record<string, unknown>): string | undefined =>
-  typeof options.apiKey === "string" ? options.apiKey : undefined;
-
 const extractStringOption = (options: Record<string, unknown>, key: string): string | undefined =>
   typeof options[key] === "string" ? (options[key] as string) : undefined;
 
-const normalizeBaseURL = (providerType: ScannableProviderType, baseURL: string): string =>
-  providerType === "anthropic" ? stripV1Suffix(baseURL) : baseURL;
+const normalizeBaseURL = (type: ScannableProviderType, baseURL: string): string =>
+  type === "anthropic" ? stripV1Suffix(baseURL) : baseURL;
 
 const resolveBaseURL = (
   provider: ProviderData,
-  providerType: ScannableProviderType,
-  model: ProviderModel,
+  type: ScannableProviderType,
 ): string | undefined => {
   const configured = extractStringOption(provider.options, "baseURL");
-  if (configured) {
-    return normalizeBaseURL(providerType, configured);
-  }
 
-  const modelURL = model.api.url;
-  if (typeof modelURL !== "string") {
-    return undefined;
-  }
-
-  return normalizeBaseURL(providerType, modelURL);
+  return configured ? normalizeBaseURL(type, configured) : undefined;
 };
 
-const extractCredentials = (
+const collectWebsearchModels = (
   provider: ProviderData,
-  providerType: ScannableProviderType,
-  model: ProviderModel,
-): ProviderCredentials | null => {
-  const apiKey = provider.key ?? extractApiKey(provider.options);
+): { fallbackModel?: string; lockedModel?: string } => {
+  let lockedModel: string | undefined = undefined;
+  let fallbackModel: string | undefined = undefined;
+
+  for (const model of Object.values(provider.models)) {
+    const flag = getWebsearchOption(model);
+    if (flag === WEBSEARCH_ALWAYS && !lockedModel) {
+      lockedModel = model.id;
+    }
+    if (flag === WEBSEARCH_AUTO && !fallbackModel) {
+      fallbackModel = model.id;
+    }
+  }
+
+  return { fallbackModel, lockedModel };
+};
+
+const scanProvider = (provider: ProviderData): ProviderResolution | null => {
+  const type = detectProviderType(provider);
+  if (!type) {
+    return null;
+  }
+
+  const apiKey = provider.key ?? extractStringOption(provider.options, "apiKey");
   if (!apiKey) {
     return null;
   }
 
-  return { apiKey, baseURL: resolveBaseURL(provider, providerType, model) };
-};
-
-const createInitialScanState = (): ScanState =>
-  Object.fromEntries(SCANNABLE_TYPES.map((type) => [type, { credentials: null }])) as ScanState;
-
-const updateModelsFromWebsearchOption = (scan: ScanResult, model: ProviderModel): void => {
-  const option = getWebsearchOption(model);
-  if (option === WEBSEARCH_ALWAYS && !scan.lockedModel) {
-    scan.lockedModel = model.id;
-  }
-
-  if (option === WEBSEARCH_AUTO && !scan.fallbackModel) {
-    scan.fallbackModel = model.id;
-  }
-};
-
-const processProviderModel = (
-  provider: ProviderData,
-  model: ProviderModel,
-  providerType: ScannableProviderType,
-  state: ScanState,
-): void => {
-  const scan = state[providerType];
-  const candidate = extractCredentials(provider, providerType, model);
-  if (!scan.credentials) {
-    scan.credentials = candidate;
-  } else if (!scan.credentials.baseURL && candidate?.baseURL) {
-    scan.credentials = { ...scan.credentials, baseURL: candidate.baseURL };
-  }
-
-  updateModelsFromWebsearchOption(scan, model);
-};
-
-const scanProvider = (provider: ProviderData, state: ScanState): void => {
-  const providerType = detectProviderType(provider.id);
-  if (!providerType) {
-    return;
-  }
-
-  for (const model of Object.values(provider.models)) {
-    processProviderModel(provider, model, providerType, state);
-  }
-};
-
-const buildResolution = (scan: ScanResult): ProviderResolution | null => {
-  if (!scan.credentials) {
-    return null;
-  }
+  const { fallbackModel, lockedModel } = collectWebsearchModels(provider);
 
   return {
-    credentials: scan.credentials,
-    fallbackModel: scan.fallbackModel,
-    lockedModel: scan.lockedModel,
+    credentials: { apiKey, baseURL: resolveBaseURL(provider, type) },
+    fallbackModel,
+    lockedModel,
+    providerID: provider.id,
+    type,
   };
 };
 
 // ── Public API ─────────────────────────────────────────────────────────
 
 /**
- * Scan all providers in one pass, recording credentials and any
- * `websearch`-tagged models per scannable provider type.
+ * Scan all providers, emitting one resolution per detected provider.
+ * Resolutions preserve OpenCode's config insertion order, which is the
+ * order used to break ties when multiple providers expose `websearch`
+ * flags.
  */
-const scanProviders = (providers: ProviderData[]): ScanState => {
-  const state = createInitialScanState();
+const scanProviders = (providers: ProviderData[]): ProviderResolution[] => {
+  const result: ProviderResolution[] = [];
 
   for (const provider of providers) {
-    scanProvider(provider, state);
-  }
-
-  return state;
-};
-
-/**
- * Build the resolution map from a previously computed scan state.
- * Only providers with credentials are emitted.
- */
-const buildResolutionMap = (state: ScanState): ProviderResolutionMap => {
-  const result: ProviderResolutionMap = {};
-
-  for (const type of SCANNABLE_TYPES) {
-    const resolution = buildResolution(state[type]);
+    const resolution = scanProvider(provider);
     if (resolution) {
-      result[type] = resolution;
+      result.push(resolution);
     }
   }
 
@@ -254,11 +191,4 @@ You can either:
 
 Or set \`"websearch": "always"\` to always use that model for web search regardless of your active model.`;
 
-export {
-  buildResolutionMap,
-  formatNoProviderError,
-  formatUnsupportedProviderError,
-  ProviderData,
-  ScanState,
-  scanProviders,
-};
+export { formatNoProviderError, formatUnsupportedProviderError, ProviderData, scanProviders };
