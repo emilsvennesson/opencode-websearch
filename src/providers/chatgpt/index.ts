@@ -1,6 +1,5 @@
 import { formatUnhandledSearchError } from "../shared/errors.js";
 import {
-  MAX_RESPONSE_TOKENS,
   buildSearchInput,
   buildStructuredResponse,
   EMPTY_LENGTH,
@@ -105,7 +104,6 @@ const buildRequestBody = (config: SearchConfig, query: string): Record<string, u
     },
   ],
   instructions: SEARCH_SYSTEM_PROMPT,
-  max_output_tokens: MAX_RESPONSE_TOKENS,
   model: config.model,
   store: STORE_DISABLED,
   stream: STREAM_ENABLED,
