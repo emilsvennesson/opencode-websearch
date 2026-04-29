@@ -16,6 +16,13 @@ interface ProviderCredentials {
 type ProviderType = "anthropic" | "chatgpt" | "copilot" | "moonshot" | "openai";
 
 /**
+ * Provider types detectable from OpenCode provider config.
+ * `chatgpt` is excluded because it is derived from OAuth credentials
+ * read separately from `auth.json`, not from a provider entry.
+ */
+type ScannableProviderType = Exclude<ProviderType, "chatgpt">;
+
+/**
  * Fully resolved config for a single web search call:
  * credentials + the specific model to use.
  */
@@ -27,28 +34,23 @@ interface SearchConfig {
 }
 
 /**
- * The result of scanning a single provider at startup:
- * - `credentials`: API key + optional base URL
- * - `lockedModel`: model ID if a model has `websearch: "always"` (hard lock)
- * - `fallbackModel`: model ID if a model has `"websearch": "auto"` (soft fallback)
- * - `providerType`: which provider this resolution belongs to
+ * One scanned provider, ready to answer a web-search call.
+ *
+ * - `providerID`: the OpenCode provider ID (e.g. `"openai"`,
+ *   `"openai-prod"`). Resolutions are matched against the active model's
+ *   `providerID` directly, allowing multiple providers of the same type
+ *   with different credentials/baseURLs to coexist.
+ * - `type`: which adapter to dispatch to. May be mutated after scanning
+ *   when ChatGPT OAuth shadows the canonical `openai` provider.
+ * - `lockedModel`: model ID if a model has `"websearch": "always"`.
+ * - `fallbackModel`: model ID if a model has `"websearch": "auto"`.
  */
 interface ProviderResolution {
   credentials: ProviderCredentials;
   fallbackModel?: string;
   lockedModel?: string;
-  providerType: ProviderType;
-}
-
-/**
- * Map of provider resolutions, one per supported provider type.
- */
-interface ProviderResolutionMap {
-  anthropic?: ProviderResolution;
-  chatgpt?: ProviderResolution;
-  copilot?: ProviderResolution;
-  moonshot?: ProviderResolution;
-  openai?: ProviderResolution;
+  providerID: string;
+  type: ProviderType;
 }
 
 // ── Active Model ───────────────────────────────────────────────────────
@@ -60,15 +62,6 @@ interface ProviderResolutionMap {
 interface ActiveModel {
   modelID: string;
   providerID: string;
-}
-
-// ── Tool Args ──────────────────────────────────────────────────────────
-
-/**
- * Arguments accepted by the web-search tool.
- */
-interface SearchArgs {
-  query: string;
 }
 
 // ── Structured Result Types ────────────────────────────────────────────
@@ -95,9 +88,8 @@ export {
   ActiveModel,
   ProviderCredentials,
   ProviderResolution,
-  ProviderResolutionMap,
   ProviderType,
-  SearchArgs,
+  ScannableProviderType,
   SearchConfig,
   SearchHit,
   StructuredSearchResponse,

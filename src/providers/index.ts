@@ -1,4 +1,4 @@
-import { ProviderType, SearchArgs, SearchConfig } from "../types.js";
+import { ProviderType, SearchConfig } from "../types.js";
 import {
   executeSearch as executeAnthropicSearch,
   formatErrorMessage as formatAnthropicError,
@@ -23,7 +23,7 @@ import {
 // ── Types ──────────────────────────────────────────────────────────────
 
 interface ProviderAdapter {
-  executeSearch: (config: SearchConfig, args: SearchArgs) => Promise<string>;
+  executeSearch: (config: SearchConfig, query: string) => Promise<string>;
   formatErrorMessage: (error: unknown) => string;
 }
 
@@ -58,16 +58,9 @@ const dispatchSearch = async (
   providerType: ProviderType,
   config: SearchConfig,
   query: string,
-): Promise<string> => {
-  const adapter = PROVIDER_ADAPTERS[providerType];
+): Promise<string> => PROVIDER_ADAPTERS[providerType].executeSearch(config, query);
 
-  return adapter.executeSearch(config, { query });
-};
-
-const dispatchErrorMessage = (providerType: ProviderType, error: unknown): string => {
-  const adapter = PROVIDER_ADAPTERS[providerType];
-
-  return adapter.formatErrorMessage(error);
-};
+const dispatchErrorMessage = (providerType: ProviderType, error: unknown): string =>
+  PROVIDER_ADAPTERS[providerType].formatErrorMessage(error);
 
 export { dispatchErrorMessage, dispatchSearch };

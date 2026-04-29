@@ -6,7 +6,7 @@ import {
   SEARCH_SYSTEM_PROMPT,
   buildSearchInput,
 } from "../shared/search.js";
-import { SearchArgs, SearchConfig, SearchHit, StructuredSearchResponse } from "../../types.js";
+import { SearchConfig, SearchHit, StructuredSearchResponse } from "../../types.js";
 import { formatUnhandledSearchError } from "../shared/errors.js";
 
 // ── Anthropic-specific types ────────────────────────────────────────────
@@ -107,7 +107,7 @@ const createAnthropicClient = (config: SearchConfig): Anthropic => {
   return new Anthropic(options);
 };
 
-const executeSearch = async (config: SearchConfig, args: SearchArgs): Promise<string> => {
+const executeSearch = async (config: SearchConfig, query: string): Promise<string> => {
   const client = createAnthropicClient(config);
   const webSearchTool = buildWebSearchTool();
 
@@ -115,7 +115,7 @@ const executeSearch = async (config: SearchConfig, args: SearchArgs): Promise<st
     max_tokens: MAX_RESPONSE_TOKENS,
     messages: [
       {
-        content: buildSearchInput(args.query),
+        content: buildSearchInput(query),
         role: "user",
       },
     ],
@@ -125,7 +125,7 @@ const executeSearch = async (config: SearchConfig, args: SearchArgs): Promise<st
   });
 
   const content = response.content as ContentBlock[];
-  const structured = processResponseBlocks(args.query, content);
+  const structured = processResponseBlocks(query, content);
 
   return JSON.stringify(structured);
 };

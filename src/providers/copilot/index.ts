@@ -11,7 +11,7 @@ import {
 } from "../shared/search.js";
 import { formatUnhandledSearchError } from "../shared/errors.js";
 import OpenAI, { APIError } from "openai";
-import { SearchArgs, SearchConfig } from "../../types.js";
+import { SearchConfig } from "../../types.js";
 import { COPILOT_INITIATOR, COPILOT_INTENT, COPILOT_USER_AGENT } from "./constants.js";
 
 // ── Constants ──────────────────────────────────────────────────────────
@@ -33,7 +33,7 @@ const formatErrorMessage = (error: unknown): string => {
 
 // ── Client and execution ───────────────────────────────────────────────
 
-const executeSearch = async (config: SearchConfig, args: SearchArgs): Promise<string> => {
+const executeSearch = async (config: SearchConfig, query: string): Promise<string> => {
   const client = createOpenAICompatibleClient(config, {
     "Openai-Intent": COPILOT_INTENT,
     "User-Agent": COPILOT_USER_AGENT,
@@ -42,7 +42,7 @@ const executeSearch = async (config: SearchConfig, args: SearchArgs): Promise<st
 
   const response = await client.responses.create({
     include: WEB_SEARCH_INCLUDE,
-    input: buildSearchInput(args.query),
+    input: buildSearchInput(query),
     instructions: SEARCH_SYSTEM_PROMPT,
     max_output_tokens: MAX_RESPONSE_TOKENS,
     model: config.model,
@@ -52,7 +52,7 @@ const executeSearch = async (config: SearchConfig, args: SearchArgs): Promise<st
 
   const outputText = resolveOutputText(response.output_text, response.output);
   const hits = collectUniqueAnnotationAndSourceHits(response.output);
-  const structured = buildStructuredResponse(args.query, outputText, hits);
+  const structured = buildStructuredResponse(query, outputText, hits);
 
   return JSON.stringify(structured);
 };

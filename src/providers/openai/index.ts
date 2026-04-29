@@ -5,7 +5,7 @@ import {
   buildStructuredResponse,
 } from "../shared/search.js";
 import OpenAI, { APIError } from "openai";
-import { SearchArgs, SearchConfig } from "../../types.js";
+import { SearchConfig } from "../../types.js";
 import {
   collectUniqueAnnotationHits,
   createOpenAICompatibleClient,
@@ -28,11 +28,11 @@ const formatErrorMessage = (error: unknown): string => {
 
 // ── Client and execution ───────────────────────────────────────────────
 
-const executeSearch = async (config: SearchConfig, args: SearchArgs): Promise<string> => {
+const executeSearch = async (config: SearchConfig, query: string): Promise<string> => {
   const client = createOpenAICompatibleClient(config);
 
   const response = await client.responses.create({
-    input: buildSearchInput(args.query),
+    input: buildSearchInput(query),
     instructions: SEARCH_SYSTEM_PROMPT,
     max_output_tokens: MAX_RESPONSE_TOKENS,
     model: config.model,
@@ -40,7 +40,7 @@ const executeSearch = async (config: SearchConfig, args: SearchArgs): Promise<st
   });
 
   const hits = collectUniqueAnnotationHits(response.output);
-  const structured = buildStructuredResponse(args.query, response.output_text, hits);
+  const structured = buildStructuredResponse(query, response.output_text, hits);
 
   return JSON.stringify(structured);
 };

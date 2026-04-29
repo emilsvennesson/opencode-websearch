@@ -1,4 +1,4 @@
-import { ProviderType } from "../types.js";
+import { ScannableProviderType } from "../types.js";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -6,107 +6,65 @@ interface ProviderModelLike {
   api: { npm: string };
 }
 
-interface ProviderRule {
-  idHints: string[];
-  npmPackage: string;
-  type: ProviderType;
-}
-
-interface ProviderModelDetectionContext {
-  model: ProviderModelLike;
-  providerID: string;
+interface ProviderDataLike {
+  id: string;
+  models: Record<string, ProviderModelLike>;
 }
 
 // ── Constants ──────────────────────────────────────────────────────────
 
-const MOONSHOT_PROVIDER_ID = "moonshotai";
-const OPENAI_COMPATIBLE_PACKAGE = "@ai-sdk/openai-compatible";
+/**
+ * Map of canonical OpenCode provider IDs to the web-search provider type
+ * that handles them. The IDs match the well-known identifiers used by
+ * OpenCode and models.dev (see `packages/opencode/src/provider/schema.ts`).
+ */
+const PROVIDER_TYPES_BY_ID: Record<string, ScannableProviderType> = {
+  anthropic: "anthropic",
+  "github-copilot": "copilot",
+  moonshotai: "moonshot",
+  "moonshotai-cn": "moonshot",
+  openai: "openai",
+};
 
-const RESOLUTION_PRIORITY: ProviderType[] = [
-  "anthropic",
-  "chatgpt",
-  "moonshot",
-  "openai",
-  "copilot",
-];
-
-const PROVIDER_RULES: ProviderRule[] = [
-  {
-    idHints: ["anthropic"],
-    npmPackage: "@ai-sdk/anthropic",
-    type: "anthropic",
-  },
-  {
-    idHints: ["openai"],
-    npmPackage: "@ai-sdk/openai",
-    type: "openai",
-  },
-  {
-    idHints: ["github-copilot", "copilot"],
-    npmPackage: "@ai-sdk/github-copilot",
-    type: "copilot",
-  },
-];
+/**
+ * Unambiguous SDK-package-to-type mappings. Used to detect custom-renamed
+ * providers (e.g. `openai-prod`, `openai-staging`) so they can be handled
+ * as their underlying type with their own credentials and baseURL.
+ *
+ * Moonshot is intentionally omitted: `@ai-sdk/openai-compatible` is shared
+ * by many unrelated providers and cannot be auto-detected by npm alone.
+ */
+const NPM_TO_TYPE: Record<string, ScannableProviderType> = {
+  "@ai-sdk/anthropic": "anthropic",
+  "@ai-sdk/github-copilot": "copilot",
+  "@ai-sdk/openai": "openai",
+};
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
-const isMoonshotProviderID = (providerID: string): boolean => {
-  const normalizedProviderID = providerID.toLowerCase();
+/**
+ * Identify which adapter type should serve a given provider.
+ *
+ * 1. Match the canonical OpenCode provider ID (covers the common case).
+ * 2. Fall back to matching any model's `api.npm` against the unambiguous
+ *    SDK packages (covers custom-renamed providers like `openai-prod`).
+ *
+ * Returns `null` if neither matches; the provider will be ignored.
+ */
+const detectProviderType = (provider: ProviderDataLike): ScannableProviderType | null => {
+  const byID = PROVIDER_TYPES_BY_ID[provider.id];
+  if (byID) {
+    return byID;
+  }
 
-  return normalizedProviderID === MOONSHOT_PROVIDER_ID;
-};
-
-const detectProviderTypeFromNpm = (npmPackage: string): ProviderType | null => {
-  for (const rule of PROVIDER_RULES) {
-    if (rule.npmPackage === npmPackage) {
-      return rule.type;
+  for (const model of Object.values(provider.models)) {
+    const byNpm = NPM_TO_TYPE[model.api.npm];
+    if (byNpm) {
+      return byNpm;
     }
   }
 
   return null;
 };
 
-const detectProviderTypeFromProviderID = (providerID: string): ProviderType | null => {
-  if (isMoonshotProviderID(providerID)) {
-    return "moonshot";
-  }
-
-  const normalizedProviderID = providerID.toLowerCase();
-
-  for (const rule of PROVIDER_RULES) {
-    for (const hint of rule.idHints) {
-      if (normalizedProviderID.includes(hint)) {
-        return rule.type;
-      }
-    }
-  }
-
-  return null;
-};
-
-const detectProviderTypeFromModel = (
-  context: ProviderModelDetectionContext,
-): ProviderType | null => {
-  const { model } = context;
-  const directType = detectProviderTypeFromNpm(model.api.npm);
-  if (directType) {
-    return directType;
-  }
-
-  if (model.api.npm !== OPENAI_COMPATIBLE_PACKAGE) {
-    return null;
-  }
-
-  if (isMoonshotProviderID(context.providerID)) {
-    return "moonshot";
-  }
-
-  return null;
-};
-
-export {
-  detectProviderTypeFromModel,
-  detectProviderTypeFromNpm,
-  detectProviderTypeFromProviderID,
-  RESOLUTION_PRIORITY,
-};
+export { detectProviderType };

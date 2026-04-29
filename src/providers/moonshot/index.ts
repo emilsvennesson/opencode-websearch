@@ -6,7 +6,7 @@ import {
 } from "../shared/search.js";
 import OpenAI, { APIError } from "openai";
 
-import { SearchArgs, SearchConfig } from "../../types.js";
+import { SearchConfig } from "../../types.js";
 import { formatUnhandledSearchError } from "../shared/errors.js";
 import {
   collectUniqueChatCompletionAnnotationHits,
@@ -235,11 +235,11 @@ const runSearchLoop = async (
   return buildMaxTurnsResponse(query);
 };
 
-const executeSearch = async (config: SearchConfig, args: SearchArgs): Promise<string> => {
+const executeSearch = async (config: SearchConfig, query: string): Promise<string> => {
   const client = createOpenAICompatibleClient(config);
-  const messages = buildMessages(args.query);
+  const messages = buildMessages(query);
 
-  return runSearchLoop(client, config.model, messages, args.query);
+  return runSearchLoop(client, config.model, messages, query);
 };
 
 export { executeSearch, formatErrorMessage };
