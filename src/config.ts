@@ -1,4 +1,4 @@
-import { ProviderResolution, ScannableProviderType } from "./types.js";
+import { ProviderCredentials, ProviderType, ScannableProviderType } from "./types.js";
 import { detectProviderType } from "./providers/registry.js";
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -16,6 +16,26 @@ interface ProviderModel {
   };
   id: string;
   options: Record<string, unknown>;
+}
+
+/**
+ * A scan result that may not yet have credentials.
+ *
+ * Distinct from `ProviderResolution` because we want to preserve the
+ * `websearch` flags configured on a provider even when its API key is
+ * missing — the OAuth attachment step in `loadResolutions` can fill
+ * those credentials in afterwards (e.g. for `github-copilot` configured
+ * only with `"websearch": "always"` flags and authenticated via OAuth).
+ *
+ * Resolutions still missing credentials after OAuth attachment are
+ * filtered out before the public `ProviderResolution[]` is returned.
+ */
+interface ScannedResolution {
+  credentials: ProviderCredentials | null;
+  fallbackModel?: string;
+  lockedModel?: string;
+  providerID: string;
+  type: ProviderType;
 }
 
 // ── Constants ──────────────────────────────────────────────────────────
@@ -70,21 +90,24 @@ const collectWebsearchModels = (
   return { fallbackModel, lockedModel };
 };
 
-const scanProvider = (provider: ProviderData): ProviderResolution | null => {
+const scanProvider = (provider: ProviderData): ScannedResolution | null => {
   const type = detectProviderType(provider);
   if (!type) {
     return null;
   }
 
   const apiKey = provider.key ?? extractStringOption(provider.options, "apiKey");
-  if (!apiKey) {
+  const { fallbackModel, lockedModel } = collectWebsearchModels(provider);
+
+  // Skip providers that contribute nothing: no credentials and no flags.
+  if (!apiKey && !lockedModel && !fallbackModel) {
     return null;
   }
 
-  const { fallbackModel, lockedModel } = collectWebsearchModels(provider);
+  const credentials = apiKey ? { apiKey, baseURL: resolveBaseURL(provider, type) } : null;
 
   return {
-    credentials: { apiKey, baseURL: resolveBaseURL(provider, type) },
+    credentials,
     fallbackModel,
     lockedModel,
     providerID: provider.id,
@@ -95,13 +118,16 @@ const scanProvider = (provider: ProviderData): ProviderResolution | null => {
 // ── Public API ─────────────────────────────────────────────────────────
 
 /**
- * Scan all providers, emitting one resolution per detected provider.
- * Resolutions preserve OpenCode's config insertion order, which is the
- * order used to break ties when multiple providers expose `websearch`
- * flags.
+ * Scan all providers, emitting one scan result per detected provider.
+ *
+ * Each result preserves OpenCode's config insertion order, which is
+ * the order used to break ties when multiple providers expose
+ * `websearch` flags. Some entries may have null credentials at this
+ * stage; the OAuth attachment phase fills them in (and any still-null
+ * entries are filtered out before being returned to callers).
  */
-const scanProviders = (providers: ProviderData[]): ProviderResolution[] => {
-  const result: ProviderResolution[] = [];
+const scanProviders = (providers: ProviderData[]): ScannedResolution[] => {
+  const result: ScannedResolution[] = [];
 
   for (const provider of providers) {
     const resolution = scanProvider(provider);
@@ -151,7 +177,7 @@ Or:
 
 {
   "provider": {
-    "moonshot": {
+    "moonshotai": {
       "options": {
         "apiKey": "{env:MOONSHOT_API_KEY}"
       }
@@ -191,4 +217,10 @@ You can either:
 
 Or set \`"websearch": "always"\` to always use that model for web search regardless of your active model.`;
 
-export { formatNoProviderError, formatUnsupportedProviderError, ProviderData, scanProviders };
+export {
+  formatNoProviderError,
+  formatUnsupportedProviderError,
+  ProviderData,
+  ScannedResolution,
+  scanProviders,
+};

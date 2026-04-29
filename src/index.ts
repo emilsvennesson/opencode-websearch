@@ -2,6 +2,7 @@ import { ActiveModel, ProviderResolution } from "./types.js";
 import { Plugin, PluginInput, tool } from "@opencode-ai/plugin";
 import {
   ProviderData,
+  ScannedResolution,
   formatNoProviderError,
   formatUnsupportedProviderError,
   scanProviders,
@@ -74,6 +75,9 @@ const pickModel = (
 
 // ── Resolution loading ─────────────────────────────────────────────────
 
+const hasCredentials = (resolution: ScannedResolution): resolution is ProviderResolution =>
+  resolution.credentials !== null;
+
 const loadResolutions = async (
   client: PluginInput["client"],
   directory: string,
@@ -83,39 +87,44 @@ const loadResolutions = async (
     return [];
   }
 
-  const resolutions = scanProviders(data.providers as ProviderData[]);
+  const scanned = scanProviders(data.providers as ProviderData[]);
 
   /*
-   * ChatGPT OAuth shadows the canonical `openai` provider when no custom
-   * baseURL is set. Custom-renamed openai-typed providers keep their own
-   * credentials because their explicit baseURL would not authenticate
+   * ChatGPT OAuth shadows the canonical `openai` provider when it has no
+   * explicit baseURL. This covers two cases:
+   *   - a configured `openai` provider with apiKey but no baseURL: OAuth
+   *     replaces the apiKey and the type flips to `"chatgpt"`.
+   *   - a credential-less `openai` block configured only for `websearch`
+   *     flags: OAuth fills in the credentials, preserving those flags.
+   *
+   * Custom-renamed openai-typed providers (e.g. `openai-prod`) keep their
+   * own credentials because their explicit baseURL would not authenticate
    * against ChatGPT OAuth tokens.
    */
   const chatgpt = await resolveChatGPTCredentials(client, directory);
   if (chatgpt) {
-    const canonical = resolutions.find(
-      (resolution) => resolution.providerID === CANONICAL_OPENAI_ID,
-    );
-    if (canonical && !canonical.credentials.baseURL) {
+    const canonical = scanned.find((resolution) => resolution.providerID === CANONICAL_OPENAI_ID);
+    if (canonical && !canonical.credentials?.baseURL) {
       canonical.credentials = chatgpt;
       canonical.type = "chatgpt";
     }
   }
 
   /*
-   * Copilot OAuth replaces credentials on the canonical `github-copilot`
-   * resolution if present, otherwise appends a synthetic resolution so
-   * the user can still web-search via Copilot without a config entry.
+   * Copilot OAuth credentials fill in the canonical `github-copilot`
+   * resolution when it has no explicit baseURL — a user with a custom
+   * Copilot proxy keeps their config. Same optional-chain guard handles
+   * the credential-less `"websearch"`-flags-only case. If no canonical
+   * resolution exists at all, we synthesize one so OAuth-only users can
+   * still web-search via Copilot without an opencode.json entry.
    */
   const copilot = await resolveCopilotCredentials(client, directory);
   if (copilot) {
-    const canonical = resolutions.find(
-      (resolution) => resolution.providerID === CANONICAL_COPILOT_ID,
-    );
-    if (canonical) {
+    const canonical = scanned.find((resolution) => resolution.providerID === CANONICAL_COPILOT_ID);
+    if (canonical && !canonical.credentials?.baseURL) {
       canonical.credentials = copilot;
-    } else {
-      resolutions.push({
+    } else if (!canonical) {
+      scanned.push({
         credentials: copilot,
         providerID: CANONICAL_COPILOT_ID,
         type: "copilot",
@@ -123,7 +132,7 @@ const loadResolutions = async (
     }
   }
 
-  return resolutions;
+  return scanned.filter(hasCredentials);
 };
 
 // ── Plugin ─────────────────────────────────────────────────────────────
