@@ -175,8 +175,11 @@ const processProviderModel = (
   }
 
   const scan = state[providerType];
+  const candidate = extractCredentials(provider, providerType, model);
   if (!scan.credentials) {
-    scan.credentials = extractCredentials(provider, providerType, model);
+    scan.credentials = candidate;
+  } else if (!scan.credentials.baseURL && candidate?.baseURL) {
+    scan.credentials = { ...scan.credentials, baseURL: candidate.baseURL };
   }
 
   updateModelsFromWebsearchOption(scan, model);
@@ -286,7 +289,7 @@ const formatNoProviderError = (): string =>
 
 No supported provider credentials (API key or OAuth) were found.
 
-To fix this, add an Anthropic or OpenAI provider to your opencode.json:
+To fix this, add an Anthropic, OpenAI, or Moonshot provider to your opencode.json:
 
 {
   "provider": {
@@ -305,6 +308,18 @@ Or:
     "openai": {
       "options": {
         "apiKey": "{env:OPENAI_API_KEY}"
+      }
+    }
+  }
+}
+
+Or:
+
+{
+  "provider": {
+    "moonshot": {
+      "options": {
+        "apiKey": "{env:MOONSHOT_API_KEY}"
       }
     }
   }

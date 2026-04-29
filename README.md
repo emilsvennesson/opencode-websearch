@@ -25,7 +25,7 @@ Asking OpenCode about the latest PostgreSQL version:
 | Provider         | What you need                                                            |
 | ---------------- | ------------------------------------------------------------------------ |
 | Anthropic        | An Anthropic provider/model in OpenCode with built-in web search support |
-| Moonshot (Kimi)  | A Moonshot API key configured in OpenCode                                 |
+| Moonshot (Kimi)  | A Moonshot API key configured in OpenCode                                |
 | OpenAI / ChatGPT | OpenAI configured in OpenCode (API key or ChatGPT connected)             |
 | GitHub Copilot   | GitHub Copilot connected in OpenCode                                     |
 

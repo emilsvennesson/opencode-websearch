@@ -45,6 +45,9 @@ interface MoonshotToolCallLike {
 
 // ── Constants ──────────────────────────────────────────────────────────
 
+const INITIAL_TURN = 0;
+const MAX_SEARCH_TURNS = 8;
+const TURN_INCREMENT = 1;
 const TOOL_CALL_FINISH_REASON = "tool_calls";
 const TOOL_ROLE = "tool";
 const USER_ROLE = "user";
@@ -187,40 +190,56 @@ const appendToolResultMessage = (
 
 // ── Client and execution ───────────────────────────────────────────────
 
-const executeSearchTurn = async (
+const buildEmptyResponse = (query: string): string =>
+  JSON.stringify(buildStructuredResponse(query, "", []));
+
+const buildFinalResponse = (query: string, message: OpenAI.ChatCompletionMessage): string => {
+  const hits = collectUniqueChatCompletionAnnotationHits(message);
+  const outputText = resolveChatCompletionOutputText(message);
+  const structured = buildStructuredResponse(query, outputText, hits);
+
+  return JSON.stringify(structured);
+};
+
+const buildMaxTurnsResponse = (query: string): string => {
+  const errorText = `Error: Moonshot web search exceeded the maximum of ${MAX_SEARCH_TURNS} tool-call turns without producing a final answer.`;
+
+  return JSON.stringify(buildStructuredResponse(query, errorText, []));
+};
+
+const runSearchLoop = async (
   client: OpenAI,
   model: string,
   messages: OpenAI.ChatCompletionMessageParam[],
   query: string,
 ): Promise<string> => {
-  const completion = await createCompletion(client, model, messages);
-  const [choice] = completion.choices;
-  if (!choice) {
-    return JSON.stringify(buildStructuredResponse(query, "", []));
+  for (let turn = INITIAL_TURN; turn < MAX_SEARCH_TURNS; turn += TURN_INCREMENT) {
+    // oxlint-disable-next-line no-await-in-loop -- each turn depends on the previous response
+    const completion = await createCompletion(client, model, messages);
+    const [choice] = completion.choices;
+    if (!choice) {
+      return buildEmptyResponse(query);
+    }
+
+    const toolCalls = extractFunctionToolCalls(choice.message);
+    if (choice.finish_reason !== TOOL_CALL_FINISH_REASON || toolCalls.length === EMPTY_LENGTH) {
+      return buildFinalResponse(query, choice.message);
+    }
+
+    appendAssistantToolCallMessage(messages, choice.message);
+    for (const toolCall of toolCalls) {
+      appendToolResultMessage(messages, toolCall);
+    }
   }
 
-  const toolCalls = extractFunctionToolCalls(choice.message);
-  if (choice.finish_reason !== TOOL_CALL_FINISH_REASON || toolCalls.length === EMPTY_LENGTH) {
-    const hits = collectUniqueChatCompletionAnnotationHits(choice.message);
-    const outputText = resolveChatCompletionOutputText(choice.message);
-    const structured = buildStructuredResponse(query, outputText, hits);
-
-    return JSON.stringify(structured);
-  }
-
-  appendAssistantToolCallMessage(messages, choice.message);
-  for (const toolCall of toolCalls) {
-    appendToolResultMessage(messages, toolCall);
-  }
-
-  return executeSearchTurn(client, model, messages, query);
+  return buildMaxTurnsResponse(query);
 };
 
 const executeSearch = async (config: SearchConfig, args: SearchArgs): Promise<string> => {
   const client = createOpenAICompatibleClient(config);
   const messages = buildMessages(args.query);
 
-  return executeSearchTurn(client, config.model, messages, args.query);
+  return runSearchLoop(client, config.model, messages, args.query);
 };
 
 export { executeSearch, formatErrorMessage };
