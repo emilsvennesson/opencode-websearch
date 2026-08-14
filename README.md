@@ -61,9 +61,9 @@ By default the plugin uses your active model. The optional `"websearch"` flag le
 ```json
 {
   "provider": {
-    "xai": {
+    "openai": {
       "models": {
-        "grok-4.6": {
+        "gpt-5.2": {
           "options": {
             "websearch": "always"
           }
