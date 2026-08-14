@@ -24,6 +24,7 @@ const PROVIDER_TYPES_BY_ID: Record<string, ScannableProviderType> = {
   moonshotai: "moonshot",
   "moonshotai-cn": "moonshot",
   openai: "openai",
+  xai: "xai",
 };
 
 /**
@@ -38,6 +39,7 @@ const NPM_TO_TYPE: Record<string, ScannableProviderType> = {
   "@ai-sdk/anthropic": "anthropic",
   "@ai-sdk/github-copilot": "copilot",
   "@ai-sdk/openai": "openai",
+  "@ai-sdk/xai": "xai",
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────

@@ -19,6 +19,10 @@ import {
   executeSearch as executeOpenAISearch,
   formatErrorMessage as formatOpenAIError,
 } from "./openai/index.js";
+import {
+  executeSearch as executeXAISearch,
+  formatErrorMessage as formatXAIError,
+} from "./xai/index.js";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -49,6 +53,10 @@ const PROVIDER_ADAPTERS: Record<ProviderType, ProviderAdapter> = {
   openai: {
     executeSearch: executeOpenAISearch,
     formatErrorMessage: formatOpenAIError,
+  },
+  xai: {
+    executeSearch: executeXAISearch,
+    formatErrorMessage: formatXAIError,
   },
 };
 

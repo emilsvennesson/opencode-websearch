@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 
 import { EMPTY_LENGTH } from "./search.js";
-import { SearchConfig, SearchHit } from "../../types.js";
+import { FetchFunction, SearchConfig, SearchHit } from "../../types.js";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -21,6 +21,7 @@ const createOpenAICompatibleClient = (
     apiKey: string;
     baseURL?: string;
     defaultHeaders?: Record<string, string>;
+    fetch?: FetchFunction;
   } = {
     apiKey: config.apiKey,
   };
@@ -31,6 +32,10 @@ const createOpenAICompatibleClient = (
 
   if (defaultHeaders) {
     options.defaultHeaders = defaultHeaders;
+  }
+
+  if (config.fetch) {
+    options.fetch = config.fetch;
   }
 
   return new OpenAI(options);
