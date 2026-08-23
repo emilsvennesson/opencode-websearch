@@ -141,15 +141,16 @@ const scanProviders = (providers: ProviderData[]): ScannedResolution[] => {
 
 // ── Error formatting ───────────────────────────────────────────────────
 
-const GENERAL_MODEL_HINT = "claude-sonnet-4-6, claude-opus-4-6, gpt-5.4, gpt-5.4-mini, kimi-k2.6";
+const GENERAL_MODEL_HINT =
+  "claude-sonnet-4-6, claude-opus-4-6, gpt-5.4, gpt-5.4-mini, grok-4.6, kimi-k2.6";
 const COPILOT_MODEL_HINT = "gpt-5.3-codex, gpt-5.2-codex, gpt-5.2, gpt-5.1, gpt-5.4-mini";
 
 const formatNoProviderError = (): string =>
-  `Error: web-search requires an Anthropic, OpenAI (API key or ChatGPT OAuth), Moonshot, or GitHub Copilot provider.
+  `Error: web-search requires an Anthropic, OpenAI (API key or ChatGPT OAuth), Moonshot, xAI, or GitHub Copilot provider.
 
 No supported provider credentials (API key or OAuth) were found.
 
-To fix this, add an Anthropic, OpenAI, or Moonshot provider to your opencode.json:
+To fix this, add an Anthropic, OpenAI, Moonshot, or xAI provider to your opencode.json:
 
 {
   "provider": {
@@ -185,15 +186,27 @@ Or:
   }
 }
 
+Or:
+
+{
+  "provider": {
+    "xai": {
+      "options": {
+        "apiKey": "{env:XAI_API_KEY}"
+      }
+    }
+  }
+}
+
 Steps:
 1. Open your opencode.json (project root, .opencode/, or ~/.config/opencode/)
-2. Ensure you have an Anthropic/OpenAI/Moonshot provider configured with a valid API key, or active OpenAI ChatGPT OAuth/Copilot auth
+2. Ensure you have an Anthropic/OpenAI/Moonshot/xAI provider configured with a valid API key, or active ChatGPT/SuperGrok/Copilot auth
 3. Restart OpenCode to pick up the configuration change`;
 
 const formatUnsupportedProviderError = (activeModelID: string): string =>
   `Error: your current model (${activeModelID}) does not support web search.
 
-Web search requires an Anthropic, OpenAI, Moonshot, or GitHub Copilot web-search-capable model.
+Web search requires an Anthropic, OpenAI, Moonshot, xAI, or GitHub Copilot web-search-capable model.
 
 Known Copilot models that work with web search today include: ${COPILOT_MODEL_HINT}.
 

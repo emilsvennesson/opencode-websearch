@@ -28,6 +28,7 @@ Asking OpenCode about the latest PostgreSQL version:
 | Moonshot (Kimi)  | A Moonshot API key configured in OpenCode                                |
 | OpenAI / ChatGPT | OpenAI configured in OpenCode (API key or ChatGPT connected)             |
 | GitHub Copilot   | GitHub Copilot connected in OpenCode                                     |
+| xAI (Grok)       | xAI configured in OpenCode (API key or SuperGrok connected)              |
 
 Model-level web search support depends on the provider and model you use.
 

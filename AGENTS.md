@@ -1,7 +1,7 @@
 # AGENTS.md
 
 OpenCode plugin that provides web search via provider web search APIs.
-Supports multiple providers (Anthropic, OpenAI, GitHub Copilot). Multi-file TypeScript project built with Bun, linted with oxlint.
+Supports multiple providers (Anthropic, OpenAI, GitHub Copilot, Moonshot, xAI). Multi-file TypeScript project built with Bun, linted with oxlint.
 
 ## Commands
 
@@ -11,12 +11,13 @@ bun run format       # oxfmt (auto-format source files in place)
 bun run format:check # oxfmt --check (verify formatting, no changes)
 bun run lint         # oxlint (with tsconfig, unicorn/typescript/import/oxc plugins)
 bun run lint:fix     # oxlint --fix (auto-fix lint issues)
+bun run test         # bun:test unit tests
 bun run typecheck    # tsc --noEmit
-bun run check        # format:check + lint + typecheck (the full quality gate)
+bun run check        # format:check + lint + typecheck + tests (the full quality gate)
 bun run build        # bun build (ESM bundle) + tsc (declaration files) → dist/
 ```
 
-There are no tests yet. When adding tests, use `bun:test` (built into Bun).
+Tests use `bun:test` (built into Bun).
 
 ## Project structure
 
@@ -33,6 +34,9 @@ src/
       index.ts          # Anthropic web search (client, execution, response formatting)
     openai/
       index.ts          # OpenAI web search (client, execution, response formatting)
+    xai/
+      auth.ts           # xAI OAuth resolution, refresh, and authenticated fetch
+      index.ts          # xAI native web search and citation formatting
     copilot/
       auth.ts           # Copilot auth state and credential resolution
       constants.ts      # Copilot-specific constants
@@ -42,6 +46,7 @@ src/
       openai-compatible.ts # shared OpenAI/Copilot client + response helpers
       search.ts         # shared search request/response constants and helpers
 dist/                   # build output (gitignored)
+test/                   # bun:test unit tests
 .oxlintrc.json          # oxlint configuration
 tsconfig.json           # TypeScript config (strict, ESNext)
 package.json            # Bun-based project, ESM module

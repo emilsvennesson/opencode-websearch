@@ -11,11 +11,13 @@ import { dispatchErrorMessage, dispatchSearch } from "./providers/index.js";
 import { getCurrentMonthYear } from "./helpers.js";
 import { resolveChatGPTCredentials } from "./providers/chatgpt/auth.js";
 import { resolveCopilotCredentials } from "./providers/copilot/auth.js";
+import { resolveXAIOAuthCredentials } from "./providers/xai/auth.js";
 
 // ── Constants ──────────────────────────────────────────────────────────
 
 const CANONICAL_COPILOT_ID = "github-copilot";
 const CANONICAL_OPENAI_ID = "openai";
+const CANONICAL_XAI_ID = "xai";
 const MIN_QUERY_LENGTH = 2;
 const NO_RESOLUTIONS = 0;
 
@@ -78,6 +80,61 @@ const pickModel = (
 const hasCredentials = (resolution: ScannedResolution): resolution is ProviderResolution =>
   resolution.credentials !== null;
 
+const attachChatGPTCredentials = async (
+  client: PluginInput["client"],
+  directory: string,
+  scanned: ScannedResolution[],
+): Promise<void> => {
+  const chatgpt = await resolveChatGPTCredentials(client, directory);
+  const canonical = scanned.find((resolution) => resolution.providerID === CANONICAL_OPENAI_ID);
+  if (chatgpt && canonical && !canonical.credentials?.baseURL) {
+    canonical.credentials = chatgpt;
+    canonical.type = "chatgpt";
+  }
+};
+
+const attachCopilotCredentials = async (
+  client: PluginInput["client"],
+  directory: string,
+  scanned: ScannedResolution[],
+): Promise<void> => {
+  const copilot = await resolveCopilotCredentials(client, directory);
+  if (!copilot) {
+    return;
+  }
+
+  const canonical = scanned.find((resolution) => resolution.providerID === CANONICAL_COPILOT_ID);
+  if (canonical && !canonical.credentials?.baseURL) {
+    canonical.credentials = copilot;
+  } else if (!canonical) {
+    scanned.push({
+      credentials: copilot,
+      providerID: CANONICAL_COPILOT_ID,
+      type: "copilot",
+    });
+  }
+};
+
+const attachXAICredentials = async (
+  client: PluginInput["client"],
+  directory: string,
+  scanned: ScannedResolution[],
+): Promise<void> => {
+  // OpenCode exposes a dummy provider key for SuperGrok and injects the real
+  // OAuth token through fetch, so replace that key with our equivalent wrapper.
+  const xai = await resolveXAIOAuthCredentials(client, directory);
+  if (!xai) {
+    return;
+  }
+
+  const canonical = scanned.find((resolution) => resolution.providerID === CANONICAL_XAI_ID);
+  if (canonical) {
+    canonical.credentials = { ...xai, baseURL: canonical.credentials?.baseURL };
+  } else {
+    scanned.push({ credentials: xai, providerID: CANONICAL_XAI_ID, type: "xai" });
+  }
+};
+
 const loadResolutions = async (
   client: PluginInput["client"],
   directory: string,
@@ -101,14 +158,7 @@ const loadResolutions = async (
    * own credentials because their explicit baseURL would not authenticate
    * against ChatGPT OAuth tokens.
    */
-  const chatgpt = await resolveChatGPTCredentials(client, directory);
-  if (chatgpt) {
-    const canonical = scanned.find((resolution) => resolution.providerID === CANONICAL_OPENAI_ID);
-    if (canonical && !canonical.credentials?.baseURL) {
-      canonical.credentials = chatgpt;
-      canonical.type = "chatgpt";
-    }
-  }
+  await attachChatGPTCredentials(client, directory, scanned);
 
   /*
    * Copilot OAuth credentials fill in the canonical `github-copilot`
@@ -118,19 +168,8 @@ const loadResolutions = async (
    * resolution exists at all, we synthesize one so OAuth-only users can
    * still web-search via Copilot without an opencode.json entry.
    */
-  const copilot = await resolveCopilotCredentials(client, directory);
-  if (copilot) {
-    const canonical = scanned.find((resolution) => resolution.providerID === CANONICAL_COPILOT_ID);
-    if (canonical && !canonical.credentials?.baseURL) {
-      canonical.credentials = copilot;
-    } else if (!canonical) {
-      scanned.push({
-        credentials: copilot,
-        providerID: CANONICAL_COPILOT_ID,
-        type: "copilot",
-      });
-    }
-  }
+  await attachCopilotCredentials(client, directory, scanned);
+  await attachXAICredentials(client, directory, scanned);
 
   return scanned.filter(hasCredentials);
 };

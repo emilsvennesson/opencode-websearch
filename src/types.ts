@@ -1,5 +1,8 @@
 // ── Shared Types ───────────────────────────────────────────────────────
 
+type FetchInput = string | URL | Request;
+type FetchFunction = (input: FetchInput, init?: RequestInit) => Promise<Response>;
+
 /**
  * Credentials needed to call a provider API.
  * Resolved from provider configuration and/or OpenCode auth state.
@@ -8,12 +11,13 @@ interface ProviderCredentials {
   accountId?: string;
   apiKey: string;
   baseURL?: string;
+  fetch?: FetchFunction;
 }
 
 /**
  * Identifies which provider type a resolution belongs to.
  */
-type ProviderType = "anthropic" | "chatgpt" | "copilot" | "moonshot" | "openai";
+type ProviderType = "anthropic" | "chatgpt" | "copilot" | "moonshot" | "openai" | "xai";
 
 /**
  * Provider types detectable from OpenCode provider config.
@@ -30,6 +34,7 @@ interface SearchConfig {
   accountId?: string;
   apiKey: string;
   baseURL?: string;
+  fetch?: FetchFunction;
   model: string;
 }
 
@@ -68,7 +73,7 @@ interface ActiveModel {
 
 /**
  * A single search result hit with a title and URL.
- * Used by Anthropic, OpenAI, and Copilot providers.
+ * Used by Anthropic, OpenAI-compatible, and Copilot providers.
  */
 interface SearchHit {
   title: string;
@@ -86,6 +91,8 @@ interface StructuredSearchResponse {
 
 export {
   ActiveModel,
+  FetchFunction,
+  FetchInput,
   ProviderCredentials,
   ProviderResolution,
   ProviderType,

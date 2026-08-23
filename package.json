@@ -18,12 +18,13 @@
     "build": "bun build src/index.ts --outdir dist --target node --format esm --packages external && bun run build:types",
     "build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
     "dev": "bun run --watch src/index.ts",
-    "format": "oxfmt src/",
-    "format:check": "oxfmt --check src/",
-    "lint": "oxlint --tsconfig tsconfig.json src/",
-    "lint:fix": "oxlint --tsconfig tsconfig.json --fix src/",
+    "format": "oxfmt src/ test/",
+    "format:check": "oxfmt --check src/ test/",
+    "lint": "oxlint --tsconfig tsconfig.json src/ test/",
+    "lint:fix": "oxlint --tsconfig tsconfig.json --fix src/ test/",
+    "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "check": "bun run format:check && bun run lint && bun run typecheck",
+    "check": "bun run format:check && bun run lint && bun run typecheck && bun run test",
     "prepublishOnly": "bun run check && bun run build"
   },
   "keywords": [
@@ -32,6 +33,8 @@
     "web-search",
     "anthropic",
     "openai",
+    "xai",
+    "grok",
     "ai"
   ],
   "repository": {
