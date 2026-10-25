@@ -11,7 +11,8 @@
       "component": "opencode-websearch",
       "changelog-path": "CHANGELOG.md",
       "draft": true,
-      "force-tag-creation": true
+      "force-tag-creation": true,
+      "extra-files": ["README.md"]
     }
   },
   "changelog-sections": [
