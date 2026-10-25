@@ -1,210 +1,56 @@
 import OpenAI from "openai";
 
-import { EMPTY_LENGTH } from "./search.js";
-import { FetchFunction, SearchConfig, SearchHit } from "../../types.js";
+import {
+  MAX_RESPONSE_TOKENS,
+  SEARCH_RESULTS_SCHEMA,
+  SEARCH_RESULTS_SCHEMA_NAME,
+  SEARCH_SYSTEM_PROMPT,
+  buildSearchInput,
+} from "./search.js";
+import { SearchConfig } from "../../types.js";
 
-// ── Types ──────────────────────────────────────────────────────────────
+// ── Constants ──────────────────────────────────────────────────────────
 
-type ResponseFunctionWebSearch = OpenAI.Responses.ResponseFunctionWebSearch;
-type ChatCompletionMessage = OpenAI.ChatCompletionMessage;
-type ResponseOutputItem = OpenAI.Responses.ResponseOutputItem;
-type ResponseOutputMessage = OpenAI.Responses.ResponseOutputMessage;
-type ResponseOutputText = OpenAI.Responses.ResponseOutputText;
+const WEB_SEARCH_TOOL: OpenAI.Responses.WebSearchTool = { type: "web_search" };
+
+/** Responses API structured output format for search results. */
+const RESPONSES_TEXT_FORMAT: OpenAI.Responses.ResponseFormatTextJSONSchemaConfig = {
+  name: SEARCH_RESULTS_SCHEMA_NAME,
+  schema: SEARCH_RESULTS_SCHEMA,
+  strict: true,
+  type: "json_schema",
+};
 
 // ── Client creation ────────────────────────────────────────────────────
 
 const createOpenAICompatibleClient = (
   config: SearchConfig,
   defaultHeaders?: Record<string, string>,
-): OpenAI => {
-  const options: {
-    apiKey: string;
-    baseURL?: string;
-    defaultHeaders?: Record<string, string>;
-    fetch?: FetchFunction;
-  } = {
-    apiKey: config.apiKey,
-  };
+): OpenAI => new OpenAI({ apiKey: config.apiKey, baseURL: config.baseURL, defaultHeaders });
 
-  if (config.baseURL) {
-    options.baseURL = config.baseURL;
-  }
+// ── Responses API search ───────────────────────────────────────────────
 
-  if (defaultHeaders) {
-    options.defaultHeaders = defaultHeaders;
-  }
+/** Run one web search through a Responses API endpoint and return its JSON text. */
+const searchWithResponses = async (
+  client: OpenAI,
+  config: SearchConfig,
+  query: string,
+  signal: AbortSignal,
+): Promise<string> => {
+  const response = await client.responses.create(
+    {
+      input: buildSearchInput(query),
+      instructions: SEARCH_SYSTEM_PROMPT,
+      max_output_tokens: MAX_RESPONSE_TOKENS,
+      model: config.model,
+      store: false,
+      text: { format: RESPONSES_TEXT_FORMAT },
+      tools: [WEB_SEARCH_TOOL],
+    },
+    { signal },
+  );
 
-  if (config.fetch) {
-    options.fetch = config.fetch;
-  }
-
-  return new OpenAI(options);
+  return response.output_text;
 };
 
-// ── Text extraction ────────────────────────────────────────────────────
-
-const collectMessageTextParts = (items: ResponseOutputItem[]): string[] => {
-  const textParts: string[] = [];
-
-  for (const item of items) {
-    if (item.type !== "message") {
-      continue;
-    }
-
-    const message = item as ResponseOutputMessage;
-    for (const part of message.content) {
-      if (part.type !== "output_text") {
-        continue;
-      }
-
-      const textPart = part as ResponseOutputText;
-      const text = textPart.text.trim();
-      if (text.length > EMPTY_LENGTH) {
-        textParts.push(text);
-      }
-    }
-  }
-
-  return textParts;
-};
-
-const resolveOutputText = (outputText: string, items: ResponseOutputItem[]): string => {
-  const directText = outputText.trim();
-  if (directText.length > EMPTY_LENGTH) {
-    return directText;
-  }
-
-  const textParts = collectMessageTextParts(items);
-  if (textParts.length === EMPTY_LENGTH) {
-    return "";
-  }
-
-  return textParts.join("\n\n");
-};
-
-const resolveChatCompletionOutputText = (message: ChatCompletionMessage): string => {
-  if (typeof message.content !== "string") {
-    return "";
-  }
-
-  const content = message.content.trim();
-  if (content.length === EMPTY_LENGTH) {
-    return "";
-  }
-
-  return content;
-};
-
-// ── Search hit extraction ──────────────────────────────────────────────
-
-const pushUniqueHit = (seen: Set<string>, hits: SearchHit[], title: string, url: string): void => {
-  if (seen.has(url)) {
-    return;
-  }
-
-  seen.add(url);
-  hits.push({ title, url });
-};
-
-const appendAnnotationHits = (
-  items: ResponseOutputItem[],
-  seen: Set<string>,
-  hits: SearchHit[],
-): void => {
-  for (const item of items) {
-    if (item.type !== "message") {
-      continue;
-    }
-
-    const message = item as ResponseOutputMessage;
-    for (const part of message.content) {
-      if (part.type !== "output_text") {
-        continue;
-      }
-
-      const outputText = part as ResponseOutputText;
-      for (const annotation of outputText.annotations) {
-        if (annotation.type !== "url_citation") {
-          continue;
-        }
-
-        pushUniqueHit(seen, hits, annotation.title, annotation.url);
-      }
-    }
-  }
-};
-
-const appendWebSearchSourceHits = (
-  items: ResponseOutputItem[],
-  seen: Set<string>,
-  hits: SearchHit[],
-): void => {
-  for (const item of items) {
-    if (item.type !== "web_search_call") {
-      continue;
-    }
-
-    const call = item as ResponseFunctionWebSearch;
-    const { action } = call;
-    if (action.type !== "search") {
-      continue;
-    }
-
-    const { sources } = action;
-    if (!sources || sources.length === EMPTY_LENGTH) {
-      continue;
-    }
-
-    for (const source of sources) {
-      pushUniqueHit(seen, hits, source.url, source.url);
-    }
-  }
-};
-
-const collectUniqueAnnotationHits = (items: ResponseOutputItem[]): SearchHit[] => {
-  const seen = new Set<string>();
-  const hits: SearchHit[] = [];
-
-  appendAnnotationHits(items, seen, hits);
-
-  return hits;
-};
-
-const collectUniqueAnnotationAndSourceHits = (items: ResponseOutputItem[]): SearchHit[] => {
-  const seen = new Set<string>();
-  const hits: SearchHit[] = [];
-
-  appendAnnotationHits(items, seen, hits);
-  appendWebSearchSourceHits(items, seen, hits);
-
-  return hits;
-};
-
-const collectUniqueChatCompletionAnnotationHits = (message: ChatCompletionMessage): SearchHit[] => {
-  const { annotations } = message;
-  if (!annotations || annotations.length === EMPTY_LENGTH) {
-    return [];
-  }
-
-  const seen = new Set<string>();
-  const hits: SearchHit[] = [];
-  for (const annotation of annotations) {
-    if (annotation.type !== "url_citation") {
-      continue;
-    }
-
-    const citation = annotation.url_citation;
-    pushUniqueHit(seen, hits, citation.title, citation.url);
-  }
-
-  return hits;
-};
-
-export {
-  collectUniqueAnnotationAndSourceHits,
-  collectUniqueAnnotationHits,
-  collectUniqueChatCompletionAnnotationHits,
-  createOpenAICompatibleClient,
-  resolveChatCompletionOutputText,
-  resolveOutputText,
-};
+export { createOpenAICompatibleClient, RESPONSES_TEXT_FORMAT, searchWithResponses };

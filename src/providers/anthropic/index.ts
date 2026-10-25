@@ -1,133 +1,91 @@
 import Anthropic, { APIError } from "@anthropic-ai/sdk";
 
 import {
-  EMPTY_LENGTH,
   MAX_RESPONSE_TOKENS,
+  SEARCH_RESULTS_SCHEMA,
   SEARCH_SYSTEM_PROMPT,
   buildSearchInput,
 } from "../shared/search.js";
-import { SearchConfig, SearchHit, StructuredSearchResponse } from "../../types.js";
-import { formatUnhandledSearchError } from "../shared/errors.js";
+import { SearchConfig } from "../../types.js";
 
-// ── Anthropic-specific types ────────────────────────────────────────────
+// ── Types ──────────────────────────────────────────────────────────────
 
-interface WebSearchResult {
-  title: string;
-  type: "web_search_result";
-  url: string;
-}
-
-interface WebSearchToolResult {
-  content: WebSearchResult[] | { error_code: string; type: "web_search_tool_result_error" };
-  tool_use_id: string;
-  type: "web_search_tool_result";
-}
-
-interface ServerToolUse {
-  id: string;
-  input: { query: string };
-  name: string;
-  type: "server_tool_use";
-}
-
-type ContentBlock = { text: string; type: "text" } | ServerToolUse | WebSearchToolResult;
+type SearchTool = Anthropic.WebSearchTool20250305 | Anthropic.WebSearchTool20260318;
 
 // ── Constants ──────────────────────────────────────────────────────────
 
-const DEFAULT_SEARCH_USES = 8;
+const BAD_REQUEST = 400;
+const FIRST_TURN = 0;
+const MAX_CONTINUATIONS = 4;
+const MAX_SEARCH_USES = 8;
+const NEXT_TURN = 1;
 
-// ── Response processing ─────────────────────────────────────────────────
-
-const processBlock = (block: ContentBlock): SearchHit[] | string | null => {
-  if (block.type === "text") {
-    const text = block.text.trim();
-    if (text.length > EMPTY_LENGTH) {
-      return text;
-    }
-  }
-
-  if (block.type === "web_search_tool_result") {
-    if (!Array.isArray(block.content)) {
-      return `Web search error: ${block.content.error_code}`;
-    }
-    return (block.content as WebSearchResult[]).map((searchResult) => ({
-      title: searchResult.title,
-      url: searchResult.url,
-    }));
-  }
-
-  return null;
+/** Latest tool, with dynamic filtering through code execution (Claude 4.6+ on Anthropic-hosted APIs). */
+const DYNAMIC_SEARCH_TOOL: Anthropic.WebSearchTool20260318 = {
+  max_uses: MAX_SEARCH_USES,
+  name: "web_search",
+  response_inclusion: "excluded",
+  type: "web_search_20260318",
 };
 
-const processResponseBlocks = (
-  query: string,
-  content: ContentBlock[],
-): StructuredSearchResponse => {
-  const results: (SearchHit[] | string)[] = [];
-
-  for (const block of content) {
-    const result = processBlock(block);
-    if (result !== null) {
-      results.push(result);
-    }
-  }
-
-  return { query, results };
-};
-
-// ── Search tool construction ───────────────────────────────────────────
-
-const buildWebSearchTool = (): Record<string, unknown> => ({
-  max_uses: DEFAULT_SEARCH_USES,
+/** Basic tool for older models and platforms without dynamic filtering. */
+const BASIC_SEARCH_TOOL: Anthropic.WebSearchTool20250305 = {
+  max_uses: MAX_SEARCH_USES,
   name: "web_search",
   type: "web_search_20250305",
-});
-
-// ── Error formatting ───────────────────────────────────────────────────
-
-const formatErrorMessage = (error: unknown): string => {
-  if (error instanceof APIError) {
-    return `Anthropic API error: ${error.message} (status: ${error.status})`;
-  }
-
-  return formatUnhandledSearchError(error);
 };
 
-// ── Client and execution ───────────────────────────────────────────────
+// ── Execution ──────────────────────────────────────────────────────────
 
-const createAnthropicClient = (config: SearchConfig): Anthropic => {
-  const options: { apiKey: string; baseURL?: string } = {
-    apiKey: config.apiKey,
-  };
+const runSearch = async (
+  client: Anthropic,
+  config: SearchConfig,
+  query: string,
+  tool: SearchTool,
+  signal: AbortSignal,
+): Promise<string> => {
+  const messages: Anthropic.MessageParam[] = [{ content: buildSearchInput(query), role: "user" }];
 
-  if (config.baseURL) {
-    options.baseURL = config.baseURL;
-  }
-
-  return new Anthropic(options);
-};
-
-const executeSearch = async (config: SearchConfig, query: string): Promise<string> => {
-  const client = createAnthropicClient(config);
-  const webSearchTool = buildWebSearchTool();
-
-  const response = await client.messages.create({
-    max_tokens: MAX_RESPONSE_TOKENS,
-    messages: [
+  for (let turn = FIRST_TURN; turn <= MAX_CONTINUATIONS; turn += NEXT_TURN) {
+    // oxlint-disable-next-line no-await-in-loop -- a paused turn must be resumed before continuing
+    const response = await client.messages.create(
       {
-        content: buildSearchInput(query),
-        role: "user",
+        max_tokens: MAX_RESPONSE_TOKENS,
+        messages,
+        model: config.model,
+        output_config: { format: { schema: SEARCH_RESULTS_SCHEMA, type: "json_schema" } },
+        system: SEARCH_SYSTEM_PROMPT,
+        tools: [tool],
       },
-    ],
-    model: config.model,
-    system: SEARCH_SYSTEM_PROMPT,
-    tools: [webSearchTool as unknown as Anthropic.Tool],
-  });
+      { signal },
+    );
 
-  const content = response.content as ContentBlock[];
-  const structured = processResponseBlocks(query, content);
+    if (response.stop_reason !== "pause_turn") {
+      const text = response.content.findLast((block) => block.type === "text");
+      return text?.type === "text" ? text.text : "";
+    }
 
-  return JSON.stringify(structured);
+    messages.push({ content: response.content, role: "assistant" });
+  }
+
+  throw new Error(`search did not finish after ${MAX_CONTINUATIONS} continuations`);
 };
 
-export { executeSearch, formatErrorMessage };
+const executeSearch = async (
+  config: SearchConfig,
+  query: string,
+  signal: AbortSignal,
+): Promise<string> => {
+  const client = new Anthropic({ apiKey: config.apiKey, baseURL: config.baseURL });
+
+  try {
+    return await runSearch(client, config, query, DYNAMIC_SEARCH_TOOL, signal);
+  } catch (error) {
+    if (!(error instanceof APIError) || error.status !== BAD_REQUEST) {
+      throw error;
+    }
+    return runSearch(client, config, query, BASIC_SEARCH_TOOL, signal);
+  }
+};
+
+export { executeSearch };

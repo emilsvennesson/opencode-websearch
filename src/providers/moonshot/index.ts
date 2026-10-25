@@ -1,245 +1,72 @@
-import {
-  EMPTY_LENGTH,
-  SEARCH_SYSTEM_PROMPT,
-  buildSearchInput,
-  buildStructuredResponse,
-} from "../shared/search.js";
-import OpenAI, { APIError } from "openai";
+import { WebSearch } from "@opencode/plugin";
 
+import { normalizeResults } from "../shared/search.js";
 import { SearchConfig } from "../../types.js";
-import { formatUnhandledSearchError } from "../shared/errors.js";
-import {
-  collectUniqueChatCompletionAnnotationHits,
-  createOpenAICompatibleClient,
-  resolveChatCompletionOutputText,
-} from "../shared/openai-compatible.js";
+import { throwResponseError } from "../shared/errors.js";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
-interface MoonshotBuiltinFunctionTool {
-  function: { name: string };
-  type: "builtin_function";
+interface MoonshotSearchResult {
+  chunks?: { text?: unknown }[];
+  date?: unknown;
+  snippet?: unknown;
+  title?: unknown;
+  url?: unknown;
 }
 
-interface MoonshotChatCompletionRequest {
-  messages: OpenAI.ChatCompletionMessageParam[];
-  model: string;
-  thinking: { type: "disabled" };
-  tool_choice: "auto";
-  tools: MoonshotBuiltinFunctionTool[];
-}
-
-interface MoonshotFunctionToolCall {
-  arguments: string;
-  id: string;
-  name: string;
-}
-
-interface MoonshotToolCallLike {
-  function?: {
-    arguments?: string;
-    name?: string;
-  };
-  id?: string;
+interface MoonshotSearchResponse {
+  search_results?: MoonshotSearchResult[];
 }
 
 // ── Constants ──────────────────────────────────────────────────────────
 
-const INITIAL_TURN = 0;
-const MAX_SEARCH_TURNS = 8;
-const TURN_INCREMENT = 1;
-const TOOL_CALL_FINISH_REASON = "tool_calls";
-const TOOL_ROLE = "tool";
-const USER_ROLE = "user";
-const WEB_SEARCH_FUNCTION_NAME = "$web_search";
-const WEB_SEARCH_TOOL: MoonshotBuiltinFunctionTool = {
-  function: { name: WEB_SEARCH_FUNCTION_NAME },
-  type: "builtin_function",
+const MOONSHOT_DEFAULT_BASE_URL = "https://api.moonshot.ai/v1";
+const NO_PASSAGES = 0;
+const RESULT_LIMIT = 10;
+const TIMEOUT_SECONDS = 45;
+
+// ── Helpers ────────────────────────────────────────────────────────────
+
+/** Prefer the ranked relevant passages; fall back to the page snippet. */
+const resultContent = (result: MoonshotSearchResult): unknown => {
+  const passages = (result.chunks ?? [])
+    .map((chunk) => chunk.text)
+    .filter((text): text is string => typeof text === "string" && text.trim() !== "");
+  return passages.length > NO_PASSAGES ? passages.join("\n\n") : result.snippet;
 };
 
-// ── Error formatting ───────────────────────────────────────────────────
-
-const formatErrorMessage = (error: unknown): string => {
-  if (error instanceof APIError) {
-    return `Moonshot API error: ${error.message} (status: ${error.status})`;
-  }
-
-  return formatUnhandledSearchError(error);
-};
-
-// ── Request helpers ────────────────────────────────────────────────────
-
-const buildMessages = (query: string): OpenAI.ChatCompletionMessageParam[] => [
-  {
-    content: SEARCH_SYSTEM_PROMPT,
-    role: "system",
-  },
-  {
-    content: buildSearchInput(query),
-    role: USER_ROLE,
-  },
-];
-
-const buildRequestBody = (
-  model: string,
-  messages: OpenAI.ChatCompletionMessageParam[],
-): MoonshotChatCompletionRequest => ({
-  messages,
-  model,
-  thinking: { type: "disabled" },
-  tool_choice: "auto",
-  tools: [WEB_SEARCH_TOOL],
+const toResultShape = (result: MoonshotSearchResult): Record<string, unknown> => ({
+  content: resultContent(result),
+  time: { published: result.date },
+  title: result.title,
+  url: result.url,
 });
 
-const createCompletion = async (
-  client: OpenAI,
-  model: string,
-  messages: OpenAI.ChatCompletionMessageParam[],
-): Promise<OpenAI.ChatCompletion> =>
-  client.post<OpenAI.ChatCompletion>("/chat/completions", {
-    body: buildRequestBody(model, messages),
-  });
+// ── Execution ──────────────────────────────────────────────────────────
 
-const toMoonshotFunctionToolCall = (
-  toolCall: OpenAI.ChatCompletionMessageToolCall,
-): MoonshotFunctionToolCall | null => {
-  const candidate = toolCall as unknown as MoonshotToolCallLike;
-  if (typeof candidate.id !== "string") {
-    return null;
-  }
-
-  if (!candidate.function) {
-    return null;
-  }
-
-  const { arguments: callArguments, name } = candidate.function;
-  if (typeof callArguments !== "string") {
-    return null;
-  }
-
-  if (typeof name !== "string") {
-    return null;
-  }
-
-  return {
-    arguments: callArguments,
-    id: candidate.id,
-    name,
-  };
-};
-
-const extractFunctionToolCalls = (
-  message: OpenAI.ChatCompletionMessage,
-): MoonshotFunctionToolCall[] => {
-  if (!message.tool_calls) {
-    return [];
-  }
-
-  const toolCalls: MoonshotFunctionToolCall[] = [];
-  for (const toolCall of message.tool_calls) {
-    const parsed = toMoonshotFunctionToolCall(toolCall);
-    if (!parsed) {
-      continue;
-    }
-
-    toolCalls.push(parsed);
-  }
-
-  return toolCalls;
-};
-
-const appendAssistantToolCallMessage = (
-  messages: OpenAI.ChatCompletionMessageParam[],
-  message: OpenAI.ChatCompletionMessage,
-): void => {
-  messages.push({
-    content: message.content,
-    role: "assistant",
-    tool_calls: message.tool_calls,
-  });
-};
-
-const parseToolArguments = (toolCall: MoonshotFunctionToolCall): unknown => {
-  try {
-    return JSON.parse(toolCall.arguments) as unknown;
-  } catch {
-    return { error: "Invalid tool arguments JSON" };
-  }
-};
-
-const resolveToolResult = (toolCall: MoonshotFunctionToolCall): unknown => {
-  if (toolCall.name !== WEB_SEARCH_FUNCTION_NAME) {
-    return `Error: unable to find tool by name '${toolCall.name}'`;
-  }
-
-  return parseToolArguments(toolCall);
-};
-
-const appendToolResultMessage = (
-  messages: OpenAI.ChatCompletionMessageParam[],
-  toolCall: MoonshotFunctionToolCall,
-): void => {
-  const content = JSON.stringify(resolveToolResult(toolCall));
-  messages.push({
-    content,
-    name: toolCall.name,
-    role: TOOL_ROLE,
-    tool_call_id: toolCall.id,
-  } as unknown as OpenAI.ChatCompletionMessageParam);
-};
-
-// ── Client and execution ───────────────────────────────────────────────
-
-const buildEmptyResponse = (query: string): string =>
-  JSON.stringify(buildStructuredResponse(query, "", []));
-
-const buildFinalResponse = (query: string, message: OpenAI.ChatCompletionMessage): string => {
-  const hits = collectUniqueChatCompletionAnnotationHits(message);
-  const outputText = resolveChatCompletionOutputText(message);
-  const structured = buildStructuredResponse(query, outputText, hits);
-
-  return JSON.stringify(structured);
-};
-
-const buildMaxTurnsResponse = (query: string): string => {
-  const errorText = `Error: Moonshot web search exceeded the maximum of ${MAX_SEARCH_TURNS} tool-call turns without producing a final answer.`;
-
-  return JSON.stringify(buildStructuredResponse(query, errorText, []));
-};
-
-const runSearchLoop = async (
-  client: OpenAI,
-  model: string,
-  messages: OpenAI.ChatCompletionMessageParam[],
+/** Search with Moonshot's Web Search Pro API, which replaced the retired `$web_search` tool. */
+const executeSearch = async (
+  config: SearchConfig,
   query: string,
-): Promise<string> => {
-  for (let turn = INITIAL_TURN; turn < MAX_SEARCH_TURNS; turn += TURN_INCREMENT) {
-    // oxlint-disable-next-line no-await-in-loop -- each turn depends on the previous response
-    const completion = await createCompletion(client, model, messages);
-    const [choice] = completion.choices;
-    if (!choice) {
-      return buildEmptyResponse(query);
-    }
-
-    const toolCalls = extractFunctionToolCalls(choice.message);
-    if (choice.finish_reason !== TOOL_CALL_FINISH_REASON || toolCalls.length === EMPTY_LENGTH) {
-      return buildFinalResponse(query, choice.message);
-    }
-
-    appendAssistantToolCallMessage(messages, choice.message);
-    for (const toolCall of toolCalls) {
-      appendToolResultMessage(messages, toolCall);
-    }
+  signal: AbortSignal,
+): Promise<readonly WebSearch.Result[]> => {
+  const baseURL = (config.baseURL ?? MOONSHOT_DEFAULT_BASE_URL).replace(/\/+$/, "");
+  const response = await fetch(`${baseURL}/tools/search_pro`, {
+    body: JSON.stringify({
+      limit: RESULT_LIMIT,
+      text_query: query,
+      timeout_seconds: TIMEOUT_SECONDS,
+    }),
+    headers: { Authorization: `Bearer ${config.apiKey}`, "Content-Type": "application/json" },
+    method: "POST",
+    signal,
+  });
+  if (!response.ok) {
+    return throwResponseError(response);
   }
 
-  return buildMaxTurnsResponse(query);
+  const body = (await response.json()) as MoonshotSearchResponse;
+  return normalizeResults((body.search_results ?? []).map(toResultShape));
 };
 
-const executeSearch = async (config: SearchConfig, query: string): Promise<string> => {
-  const client = createOpenAICompatibleClient(config);
-  const messages = buildMessages(query);
-
-  return runSearchLoop(client, config.model, messages, query);
-};
-
-export { executeSearch, formatErrorMessage };
+export { executeSearch };

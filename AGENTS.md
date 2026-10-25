@@ -23,33 +23,37 @@ Tests use `bun:test` (built into Bun).
 
 ```
 src/
-  index.ts              # plugin entry point — exports the plugin, wires tools
-  types.ts              # shared types (config, provider resolution, search result shapes)
-  helpers.ts            # generic utilities (date formatting)
-  config.ts             # config resolution (opencode.json, env fallback)
+  index.ts              # V2 Plugin.define entry point and native websearch backend
+  auth.ts               # V2 integration and OAuth credential resolution
+  config.ts             # V2 provider/model scanning and default-model routing
+  types.ts              # shared provider, routing, and credential types
   providers/
-    index.ts            # provider dispatch map (execute + error format)
-    registry.ts         # provider metadata + provider detection helpers
+    index.ts            # provider dispatch map, result parsing, and error labels
+    registry.ts         # V2 provider/package detection helpers
     anthropic/
-      index.ts          # Anthropic web search (client, execution, response formatting)
-    openai/
-      index.ts          # OpenAI web search (client, execution, response formatting)
-    xai/
-      auth.ts           # xAI OAuth resolution, refresh, and authenticated fetch
-      index.ts          # xAI native web search and citation formatting
+      index.ts          # Anthropic web search tool with structured output and version fallback
+    chatgpt/
+      constants.ts      # ChatGPT endpoint and client constants
+      index.ts          # ChatGPT streaming Responses search
     copilot/
-      auth.ts           # Copilot auth state and credential resolution
       constants.ts      # Copilot-specific constants
-      index.ts          # Copilot web search (client, execution, response formatting)
+      index.ts          # Copilot Responses search with Copilot headers
+    moonshot/
+      index.ts          # Moonshot Web Search Pro API (no model)
+    openai/
+      index.ts          # OpenAI Responses search
+    xai/
+      index.ts          # xAI Responses search
     shared/
-      errors.ts         # shared provider error fallback formatting
-      openai-compatible.ts # shared OpenAI/Copilot client + response helpers
-      search.ts         # shared search request/response constants and helpers
+      errors.ts         # HTTP error and search error formatting
+      openai-compatible.ts # OpenAI client and shared structured Responses search
+      search.ts         # system prompt, result JSON schema, and result validation
 dist/                   # build output (gitignored)
 test/                   # bun:test unit tests
 .oxlintrc.json          # oxlint configuration
 tsconfig.json           # TypeScript config (strict, ESNext)
 package.json            # Bun-based project, ESM module
+server.js               # V2 directory-package entry point (re-exports dist/index.js)
 ```
 
 ## Code style
@@ -109,10 +113,9 @@ package.json            # Bun-based project, ESM module
 
 ### Exports
 
-- `src/index.ts` uses a single `export default` — the plugin entry point.
+- `src/index.ts` uses a single `export default Plugin.define(...)` — the V2 plugin entry point.
 - Internal modules use a grouped `export { ... }` at the end of the file.
-- The plugin export is an async arrow function returning the hooks/tools object,
-  typed with `satisfies Plugin`.
+- The plugin registers a native backend through `ctx.websearch.transform(...)`.
 
 ### Comments
 
@@ -148,7 +151,7 @@ Disabled rules (with rationale):
 - `unicorn/prevent-abbreviations` -- short names like `ctx`, `env`, `url` are clear
 - `no-continue` -- `continue` is cleaner than empty if-branches or deep nesting in loops
 - `unicorn/prefer-ternary` -- ternaries are allowed but not required
-- `import/no-nodejs-modules` -- this is a Node.js plugin; fs/os/path are required
+- `import/no-nodejs-modules` -- Node.js builtins are allowed in the plugin runtime
 - `import/no-named-export` -- internal modules use named exports
 - `import/prefer-default-export` -- internal modules use named exports, not default
 - `import/consistent-type-specifier-style` -- no `import type` used
@@ -156,6 +159,5 @@ Disabled rules (with rationale):
 
 ## Dependencies
 
-- **Runtime:** `@anthropic-ai/sdk` -- Anthropic API client, `openai` -- OpenAI API client
-- **Peer:** `@opencode-ai/plugin` -- OpenCode plugin SDK (provides `Plugin` type and `tool` helper)
+- **Runtime:** `@opencode/plugin` -- OpenCode V2 plugin SDK, `@anthropic-ai/sdk` -- Anthropic API client, `openai` -- OpenAI API client
 - **Dev:** `oxfmt`, `oxlint`, `typescript`, `@types/bun`
