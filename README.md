@@ -45,7 +45,7 @@ Add the plugin to `opencode.jsonc`:
 
 <!-- x-release-please-end -->
 
-OpenCode doesn't update plugins on its own, and a pinned version stays put. To upgrade, change the version and save; OpenCode reloads the plugin.
+OpenCode doesn't update plugins automatically. To upgrade, change the version number; OpenCode reloads the plugin when you save.
 
 The plugin is enabled automatically unless you've chosen another `websearch` provider or turned web search off. To select it explicitly:
 
