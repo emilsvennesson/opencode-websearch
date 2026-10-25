@@ -3,6 +3,7 @@
 /** Provider fields used by the web-search router. */
 interface ProviderData {
   canonical?: string;
+  headers?: Record<string, string>;
   id: string;
   integrationID?: string;
   package: string;
@@ -40,20 +41,34 @@ interface ProviderCredentials {
 }
 
 /** Identifies which provider adapter should handle a search. */
-type ProviderType = "anthropic" | "chatgpt" | "copilot" | "moonshot" | "openai" | "xai";
+type ProviderType =
+  | "anthropic"
+  | "chatgpt"
+  | "copilot"
+  | "deepseek"
+  | "moonshot"
+  | "openai"
+  | "opencode-go"
+  | "xai"
+  | "zai";
 
 /** Provider types detectable from OpenCode provider metadata. */
 type ScannableProviderType = Exclude<ProviderType, "chatgpt">;
 
 /** Fully resolved configuration for one provider search call. */
 interface SearchConfig extends ProviderCredentials {
+  /** Extra request headers set by the adapter that dispatches the search. */
+  headers?: Record<string, string>;
   model: string;
+  modelBaseURL?: string;
+  providerHeaders?: Record<string, string>;
 }
 
 /** One provider that can serve web-search requests. */
 interface ProviderResolution {
   credentials: ProviderCredentials;
   fallbackModel?: string;
+  headers?: Record<string, string>;
   lockedModel?: string;
   providerID: string;
   type: ProviderType;
@@ -61,6 +76,7 @@ interface ProviderResolution {
 
 /** The selected model and its provider resolution. */
 interface PickedModel {
+  modelBaseURL?: string;
   modelID: string;
   resolution: ProviderResolution;
 }

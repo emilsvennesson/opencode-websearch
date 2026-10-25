@@ -113,4 +113,25 @@ describe("V2 credential resolution", () => {
       type: "xai",
     });
   });
+
+  test("uses the OpenCode Go access token from the OpenCode login", async () => {
+    const result = await resolveCredentials(
+      createContext(oauth({ orgID: "org-id" })),
+      {
+        id: "opencode-go",
+        integrationID: "opencode",
+        package: "@opencode/ai/providers/openai-compatible",
+      },
+      "opencode-go",
+      { baseURL: "https://opencode.ai/inference/go/openai/v1" },
+    );
+
+    expect(result).toEqual({
+      credentials: {
+        apiKey: "access-token",
+        baseURL: "https://opencode.ai/inference/go/openai/v1",
+      },
+      type: "opencode-go",
+    });
+  });
 });

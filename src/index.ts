@@ -21,7 +21,12 @@ export default Plugin.define({
           const route = await resolveSearchRoute(ctx);
           return dispatchSearch(
             route.resolution.type,
-            { ...route.resolution.credentials, model: route.modelID },
+            {
+              ...route.resolution.credentials,
+              model: route.modelID,
+              modelBaseURL: route.modelBaseURL,
+              providerHeaders: route.resolution.headers,
+            },
             query,
             signal,
           );

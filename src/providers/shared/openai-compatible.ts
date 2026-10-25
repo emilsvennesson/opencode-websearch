@@ -26,7 +26,12 @@ const RESPONSES_TEXT_FORMAT: OpenAI.Responses.ResponseFormatTextJSONSchemaConfig
 const createOpenAICompatibleClient = (
   config: SearchConfig,
   defaultHeaders?: Record<string, string>,
-): OpenAI => new OpenAI({ apiKey: config.apiKey, baseURL: config.baseURL, defaultHeaders });
+): OpenAI =>
+  new OpenAI({
+    apiKey: config.apiKey,
+    baseURL: config.baseURL,
+    defaultHeaders: { ...config.headers, ...defaultHeaders },
+  });
 
 // ── Responses API search ───────────────────────────────────────────────
 

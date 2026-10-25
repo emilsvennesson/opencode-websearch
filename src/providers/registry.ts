@@ -4,11 +4,15 @@ import { ProviderData, ProviderModel, ScannableProviderType } from "../types.js"
 
 const PROVIDER_TYPES_BY_ID: Record<string, ScannableProviderType> = {
   anthropic: "anthropic",
+  deepseek: "deepseek",
   "github-copilot": "copilot",
   moonshotai: "moonshot",
   "moonshotai-cn": "moonshot",
   openai: "openai",
+  "opencode-go": "opencode-go",
   xai: "xai",
+  zai: "zai",
+  "zai-coding-plan": "zai",
 };
 
 /** Unambiguous V2 provider packages that identify the API dialect. */

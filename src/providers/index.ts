@@ -4,9 +4,12 @@ import { ProviderType, SearchConfig } from "../types.js";
 import { executeSearch as executeAnthropicSearch } from "./anthropic/index.js";
 import { executeSearch as executeChatGPTSearch } from "./chatgpt/index.js";
 import { executeSearch as executeCopilotSearch } from "./copilot/index.js";
+import { executeSearch as executeDeepSeekSearch } from "./deepseek/index.js";
 import { executeSearch as executeMoonshotSearch } from "./moonshot/index.js";
 import { executeSearch as executeOpenAISearch } from "./openai/index.js";
+import { executeSearch as executeOpenCodeGoSearch } from "./opencode-go/index.js";
 import { executeSearch as executeXAISearch } from "./xai/index.js";
+import { executeSearch as executeZaiSearch } from "./zai/index.js";
 import { formatSearchError } from "./shared/errors.js";
 import { parseSearchResults } from "./shared/search.js";
 
@@ -37,9 +40,12 @@ const PROVIDER_ADAPTERS: Record<ProviderType, ProviderAdapter> = {
   anthropic: { label: "Anthropic", search: modelSearch(executeAnthropicSearch) },
   chatgpt: { label: "ChatGPT", search: modelSearch(executeChatGPTSearch) },
   copilot: { label: "GitHub Copilot", search: modelSearch(executeCopilotSearch) },
+  deepseek: { label: "DeepSeek", search: executeDeepSeekSearch },
   moonshot: { label: "Moonshot", search: executeMoonshotSearch },
   openai: { label: "OpenAI", search: modelSearch(executeOpenAISearch) },
+  "opencode-go": { label: "OpenCode Go", search: executeOpenCodeGoSearch },
   xai: { label: "xAI", search: modelSearch(executeXAISearch) },
+  zai: { label: "Z.ai", search: executeZaiSearch },
 };
 
 // ── Dispatch ───────────────────────────────────────────────────────────

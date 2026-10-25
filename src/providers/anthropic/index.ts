@@ -76,7 +76,11 @@ const executeSearch = async (
   query: string,
   signal: AbortSignal,
 ): Promise<string> => {
-  const client = new Anthropic({ apiKey: config.apiKey, baseURL: config.baseURL });
+  const client = new Anthropic({
+    apiKey: config.apiKey,
+    baseURL: config.baseURL,
+    defaultHeaders: config.headers,
+  });
 
   try {
     return await runSearch(client, config, query, DYNAMIC_SEARCH_TOOL, signal);

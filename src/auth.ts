@@ -8,6 +8,7 @@ import { ProviderCredentials, ProviderData, ProviderSettings, ProviderType } fro
 
 const CANONICAL_COPILOT_ID = "github-copilot";
 const CANONICAL_OPENAI_ID = "openai";
+const CANONICAL_OPENCODE_GO_ID = "opencode-go";
 const CANONICAL_XAI_ID = "xai";
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -101,7 +102,10 @@ const resolveOAuthCredentials = (
     };
   }
 
-  if (provider.id === CANONICAL_XAI_ID && type === "xai") {
+  if (
+    (provider.id === CANONICAL_XAI_ID && type === "xai") ||
+    (provider.id === CANONICAL_OPENCODE_GO_ID && type === "opencode-go")
+  ) {
     return {
       credentials: { apiKey: credential.access, baseURL: settings.baseURL },
       type,
