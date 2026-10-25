@@ -15,7 +15,6 @@ import {
 // ── Types ──────────────────────────────────────────────────────────────
 
 interface ScannedResolution {
-  fallbackModel?: string;
   lockedModel?: string;
   provider: ProviderData;
   settings: ProviderSettings;
@@ -27,7 +26,6 @@ interface ScannedResolution {
 const NO_RESOLUTIONS = 0;
 const UNKNOWN_MODEL = "unknown";
 const WEBSEARCH_ALWAYS = "always";
-const WEBSEARCH_AUTO = "auto";
 
 // ── Provider scanning ──────────────────────────────────────────────────
 
@@ -54,33 +52,8 @@ const resolveSettings = (provider: ProviderData, type: ScannableProviderType): P
   };
 };
 
-const getWebsearchOption = (model: ProviderModel): string | null => {
-  const value = model.settings?.websearch;
-  return value === WEBSEARCH_ALWAYS || value === WEBSEARCH_AUTO ? value : null;
-};
-
-const collectWebsearchModels = (
-  models: ProviderModel[],
-): { fallbackModel?: string; lockedModel?: string } => {
-  let fallbackModel: string | undefined = undefined;
-  let lockedModel: string | undefined = undefined;
-
-  for (const model of models) {
-    if (!model.enabled) {
-      continue;
-    }
-
-    const flag = getWebsearchOption(model);
-    if (flag === WEBSEARCH_ALWAYS && !lockedModel) {
-      lockedModel = model.modelID;
-    }
-    if (flag === WEBSEARCH_AUTO && !fallbackModel) {
-      fallbackModel = model.modelID;
-    }
-  }
-
-  return { fallbackModel, lockedModel };
-};
+const findLockedModel = (models: ProviderModel[]): string | undefined =>
+  models.find((model) => model.enabled && model.settings?.websearch === WEBSEARCH_ALWAYS)?.modelID;
 
 const scanProvider = (
   provider: ProviderData,
@@ -92,7 +65,7 @@ const scanProvider = (
   }
 
   return {
-    ...collectWebsearchModels(models),
+    lockedModel: findLockedModel(models),
     provider,
     settings: resolveSettings(provider, type),
     type,
@@ -115,20 +88,15 @@ const scanProviders = (providers: ProviderData[], models: ProviderModel[]): Scan
 
 // ── Route selection ────────────────────────────────────────────────────
 
-const findFirstWithKey = (
-  resolutions: ProviderResolution[],
-  key: "fallbackModel" | "lockedModel",
-): ProviderResolution | null => resolutions.find((resolution) => Boolean(resolution[key])) ?? null;
-
 /**
  * Pick a model using the V2 default model instead of session-specific state:
- * locked model, default model on a supported provider, then fallback model.
+ * a model locked with `"websearch": "always"`, then the default model on a supported provider.
  */
 const pickModel = (
   resolutions: ProviderResolution[],
   defaultModel: DefaultModel | null,
 ): PickedModel | null => {
-  const locked = findFirstWithKey(resolutions, "lockedModel");
+  const locked = resolutions.find((resolution) => resolution.lockedModel);
   if (locked?.lockedModel) {
     return { modelID: locked.lockedModel, resolution: locked };
   }
@@ -138,11 +106,6 @@ const pickModel = (
   );
   if (direct && defaultModel) {
     return { modelID: defaultModel.modelID, resolution: direct };
-  }
-
-  const fallback = findFirstWithKey(resolutions, "fallbackModel");
-  if (fallback?.fallbackModel) {
-    return { modelID: fallback.fallbackModel, resolution: fallback };
   }
 
   return null;
@@ -173,7 +136,6 @@ const loadResolutions = async (
 
       return {
         credentials: resolved.credentials,
-        fallbackModel: current.fallbackModel,
         headers: current.provider.headers,
         lockedModel: current.lockedModel,
         providerID: current.provider.id,
@@ -195,7 +157,7 @@ No supported provider credentials were found. Connect a supported provider with 
 const formatUnsupportedProviderError = (defaultModelID: string): string =>
   `Error: the default model (${defaultModelID}) is not on a supported web-search provider.
 
-Change the default model, or set "websearch" to "auto" in a supported model's settings to use it as a fallback. Set it to "always" to override the default model for every search.`;
+Change the default model, or set "websearch" to "always" in a supported model's settings to use it for every search.`;
 
 // ── Public API ─────────────────────────────────────────────────────────
 

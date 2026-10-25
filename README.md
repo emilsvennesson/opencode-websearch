@@ -19,16 +19,16 @@ The latest release is Bun v1.4.4, marked "Latest" and tagged bun-v1.4.4. Earlier
 
 ## Supported providers
 
-| Provider         | Search                                                                      |
-| ---------------- | --------------------------------------------------------------------------- |
-| Anthropic        | `web_search_20260318` with dynamic filtering, falling back to `20250305`    |
-| OpenAI / ChatGPT | Responses API `web_search`                                                  |
-| GitHub Copilot   | Responses API `web_search`                                                  |
-| xAI (Grok)       | Responses API `web_search`                                                  |
-| Moonshot (Kimi)  | Web Search Pro API (`/v1/tools/search_pro`)                                 |
-| Z.ai (GLM)       | Web Search API (`/api/paas/v4/web_search`), including the Coding Plan       |
-| DeepSeek         | Search API (`/v1/tools/search`)                                             |
-| OpenCode Go      | The model's own search: Claude, GPT, Grok, and Kimi models only (see below) |
+| Provider         | Search                                                            |
+| ---------------- | ----------------------------------------------------------------- |
+| Anthropic        | `web_search_20260318`, falling back to `web_search_20250305`      |
+| OpenAI / ChatGPT | Responses API `web_search`                                        |
+| GitHub Copilot   | Responses API `web_search`                                        |
+| xAI (Grok)       | Responses API `web_search`                                        |
+| Moonshot (Kimi)  | Web Search Pro API                                                |
+| Z.ai (GLM)       | Web Search API, with an API key or the Coding Plan                |
+| DeepSeek         | Search API                                                        |
+| OpenCode Go      | Claude, GPT, Grok, and Kimi models only ([details](#opencode-go)) |
 
 ## Install
 
@@ -41,17 +41,17 @@ Add the plugin to `opencode.jsonc`:
 }
 ```
 
-The plugin becomes the default `websearch` provider unless you've already selected another one or set `websearch: false`. To select it explicitly, set `"websearch": { "provider": "native" }`.
+It becomes the default `websearch` provider, unless you've chosen another provider or turned web search off. To select it explicitly:
+
+```jsonc
+{
+  "websearch": { "provider": "native" },
+}
+```
 
 ## Model selection
 
-Each search uses the first match of:
-
-1. A model with `"websearch": "always"` in its options.
-2. The default model, if its provider is supported.
-3. A model with `"websearch": "auto"` in its options.
-
-The current session's model is not used.
+Searches use your default model when its provider is supported. To search with a specific model instead, set `"websearch": "always"` in its options:
 
 ```jsonc
 {
@@ -69,6 +69,8 @@ The current session's model is not used.
   },
 }
 ```
+
+The current session's model is never used.
 
 ## OpenCode Go
 

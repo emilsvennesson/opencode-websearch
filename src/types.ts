@@ -67,7 +67,6 @@ interface SearchConfig extends ProviderCredentials {
 /** One provider that can serve web-search requests. */
 interface ProviderResolution {
   credentials: ProviderCredentials;
-  fallbackModel?: string;
   headers?: Record<string, string>;
   lockedModel?: string;
   providerID: string;
