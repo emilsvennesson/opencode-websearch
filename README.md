@@ -84,7 +84,9 @@ To search with a specific model instead, set `"websearch": "always"` in its opti
 
 ### OpenCode Go
 
-OpenCode Go serves each model through its own upstream, and only Claude, GPT, Grok, and Kimi models search the web. GLM, DeepSeek, Qwen, MiniMax, and the other Go models ignore the search tool, so the plugin returns an error instead of an unsearched answer.
+OpenCode Go serves each model through its own upstream, and only Claude, GPT, Grok, and Kimi models search the web. GLM, DeepSeek, Qwen, MiniMax, and the other Go models ignore the search tool, so searching with one of them returns an error instead of an unsearched answer.
+
+If your default model is one of those, set `"websearch": "always"` on a Go model that can search, as in the example above. Searches then use that model while you keep coding with your default model.
 
 Searches count toward your Go usage limits. `gpt-6-luna` and `claude-haiku-5-5` are inexpensive choices; Grok searches cost many times more. Kimi on Go uses Moonshot's `$web_search` tool, which Moonshot has deprecated, so it may stop working without notice.
 
