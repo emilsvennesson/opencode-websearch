@@ -67,7 +67,7 @@ describe("V2 credential resolution", () => {
       {
         id: "github-copilot",
         integrationID: "github-copilot",
-        package: "@ai-sdk/github-copilot",
+        package: "aisdk:@ai-sdk/github-copilot",
       },
       "copilot",
       {},

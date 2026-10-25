@@ -20,9 +20,13 @@ describe("V2 provider detection", () => {
   test("detects a provider from a model runtime override", () => {
     expect(
       detectProviderType({ id: "copilot-proxy", package: "" }, [
-        { package: "@ai-sdk/github-copilot" },
+        { package: "aisdk:@ai-sdk/github-copilot" },
       ]),
     ).toBe("copilot");
+  });
+
+  test("ignores V1 npm package names", () => {
+    expect(detectProviderType({ id: "anthropic-proxy", package: "@ai-sdk/anthropic" })).toBeNull();
   });
 
   test("detects OpenCode Go by ID before its per-model Anthropic packages", () => {

@@ -17,10 +17,6 @@ const PROVIDER_TYPES_BY_ID: Record<string, ScannableProviderType> = {
 
 /** Unambiguous V2 provider packages that identify the API dialect. */
 const PACKAGE_TO_TYPE: Record<string, ScannableProviderType> = {
-  "@ai-sdk/anthropic": "anthropic",
-  "@ai-sdk/github-copilot": "copilot",
-  "@ai-sdk/openai": "openai",
-  "@ai-sdk/xai": "xai",
   "@opencode/ai/providers/anthropic": "anthropic",
   "@opencode/ai/providers/anthropic-compatible": "anthropic",
   "@opencode/ai/providers/moonshot": "moonshot",
