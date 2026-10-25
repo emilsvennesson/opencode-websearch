@@ -2,8 +2,6 @@
 
 Model-native web search for [OpenCode V2](https://opencode.ai/v2/docs/), powered by your provider's built-in search capability. The plugin adds a routing backend to OpenCode's built-in `websearch` tool, so no separate search service is required.
 
-Inspired by Claude Code's WebSearch tool.
-
 ## Example
 
 The built-in `websearch` tool receives one result per source, with the page's title, URL, publication date when known, and a detailed summary of the relevant findings:
@@ -25,8 +23,6 @@ The latest release is Bun v1.4.4, marked "Latest" and tagged bun-v1.4.4. Earlier
 | GitHub Copilot   | GitHub Copilot connected in OpenCode                         | Responses API `web_search`                                               |
 | xAI (Grok)       | xAI configured in OpenCode (API key or SuperGrok connected)  | Responses API `web_search`                                               |
 | Moonshot (Kimi)  | A Moonshot API key configured in OpenCode                    | Web Search Pro API (`/v1/tools/search_pro`)                              |
-
-Model-level web search support depends on the provider and model you use. Moonshot retired its `$web_search` model tool, so Moonshot searches go to its standalone search API and don't use a model.
 
 ## Install
 
@@ -74,10 +70,6 @@ The selected session model is not used. Providers, models, and credentials are r
 ```
 
 Use `"auto"` instead of `"always"` for a fallback model.
-
-## Output
-
-Model searches use the provider's structured output support (`output_config.format` for Anthropic and `text.format` with a strict JSON schema for Responses APIs). The schema mirrors OpenCode's `WebSearch.Result`: `url`, `title`, `content`, and `time.published`. The model returns an ISO 8601 date, which the plugin converts to a timestamp. Results are validated, invalid or duplicate URLs are dropped, and the built-in `websearch` tool formats them for the agent.
 
 ## Development
 
