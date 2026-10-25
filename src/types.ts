@@ -1,55 +1,56 @@
+// ── OpenCode V2 data shapes ────────────────────────────────────────────
+
+/** Provider fields used by the web-search router. */
+interface ProviderData {
+  canonical?: string;
+  id: string;
+  integrationID?: string;
+  package: string;
+  settings?: Record<string, unknown>;
+}
+
+/** Model fields used by the web-search router. */
+interface ProviderModel {
+  enabled: boolean;
+  modelID: string;
+  package?: string;
+  providerID: string;
+  settings?: Record<string, unknown>;
+}
+
+/** Default model fields used during route selection. */
+interface DefaultModel {
+  modelID: string;
+  providerID: string;
+}
+
 // ── Shared Types ───────────────────────────────────────────────────────
 
-type FetchInput = string | URL | Request;
-type FetchFunction = (input: FetchInput, init?: RequestInit) => Promise<Response>;
+/** Provider settings before credentials have been resolved. */
+interface ProviderSettings {
+  apiKey?: string;
+  baseURL?: string;
+}
 
-/**
- * Credentials needed to call a provider API.
- * Resolved from provider configuration and/or OpenCode auth state.
- */
+/** Credentials needed to call a provider API. */
 interface ProviderCredentials {
   accountId?: string;
   apiKey: string;
   baseURL?: string;
-  fetch?: FetchFunction;
 }
 
-/**
- * Identifies which provider type a resolution belongs to.
- */
+/** Identifies which provider adapter should handle a search. */
 type ProviderType = "anthropic" | "chatgpt" | "copilot" | "moonshot" | "openai" | "xai";
 
-/**
- * Provider types detectable from OpenCode provider config.
- * `chatgpt` is excluded because it is derived from OAuth credentials
- * read separately from `auth.json`, not from a provider entry.
- */
+/** Provider types detectable from OpenCode provider metadata. */
 type ScannableProviderType = Exclude<ProviderType, "chatgpt">;
 
-/**
- * Fully resolved config for a single web search call:
- * credentials + the specific model to use.
- */
-interface SearchConfig {
-  accountId?: string;
-  apiKey: string;
-  baseURL?: string;
-  fetch?: FetchFunction;
+/** Fully resolved configuration for one provider search call. */
+interface SearchConfig extends ProviderCredentials {
   model: string;
 }
 
-/**
- * One scanned provider, ready to answer a web-search call.
- *
- * - `providerID`: the OpenCode provider ID (e.g. `"openai"`,
- *   `"openai-prod"`). Resolutions are matched against the active model's
- *   `providerID` directly, allowing multiple providers of the same type
- *   with different credentials/baseURLs to coexist.
- * - `type`: which adapter to dispatch to. May be mutated after scanning
- *   when ChatGPT OAuth shadows the canonical `openai` provider.
- * - `lockedModel`: model ID if a model has `"websearch": "always"`.
- * - `fallbackModel`: model ID if a model has `"websearch": "auto"`.
- */
+/** One provider that can serve web-search requests. */
 interface ProviderResolution {
   credentials: ProviderCredentials;
   fallbackModel?: string;
@@ -58,46 +59,21 @@ interface ProviderResolution {
   type: ProviderType;
 }
 
-// ── Active Model ───────────────────────────────────────────────────────
-
-/**
- * Tracks the model the user is currently chatting with,
- * as reported by the `chat.message` hook.
- */
-interface ActiveModel {
+/** The selected model and its provider resolution. */
+interface PickedModel {
   modelID: string;
-  providerID: string;
-}
-
-// ── Structured Result Types ────────────────────────────────────────────
-
-/**
- * A single search result hit with a title and URL.
- * Used by Anthropic, OpenAI-compatible, and Copilot providers.
- */
-interface SearchHit {
-  title: string;
-  url: string;
-}
-
-/**
- * Structured response returned by a web search execution.
- * Contains the original query and an array of results (text or citation hits).
- */
-interface StructuredSearchResponse {
-  query: string;
-  results: (SearchHit[] | string)[];
+  resolution: ProviderResolution;
 }
 
 export {
-  ActiveModel,
-  FetchFunction,
-  FetchInput,
+  DefaultModel,
+  PickedModel,
   ProviderCredentials,
+  ProviderData,
+  ProviderModel,
   ProviderResolution,
+  ProviderSettings,
   ProviderType,
   ScannableProviderType,
   SearchConfig,
-  SearchHit,
-  StructuredSearchResponse,
 };

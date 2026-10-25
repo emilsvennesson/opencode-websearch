@@ -1,23 +1,7 @@
-import { ScannableProviderType } from "../types.js";
-
-// ── Types ──────────────────────────────────────────────────────────────
-
-interface ProviderModelLike {
-  api: { npm: string };
-}
-
-interface ProviderDataLike {
-  id: string;
-  models: Record<string, ProviderModelLike>;
-}
+import { ProviderData, ProviderModel, ScannableProviderType } from "../types.js";
 
 // ── Constants ──────────────────────────────────────────────────────────
 
-/**
- * Map of canonical OpenCode provider IDs to the web-search provider type
- * that handles them. The IDs match the well-known identifiers used by
- * OpenCode and models.dev (see `packages/opencode/src/provider/schema.ts`).
- */
 const PROVIDER_TYPES_BY_ID: Record<string, ScannableProviderType> = {
   anthropic: "anthropic",
   "github-copilot": "copilot",
@@ -27,42 +11,50 @@ const PROVIDER_TYPES_BY_ID: Record<string, ScannableProviderType> = {
   xai: "xai",
 };
 
-/**
- * Unambiguous SDK-package-to-type mappings. Used to detect custom-renamed
- * providers (e.g. `openai-prod`, `openai-staging`) so they can be handled
- * as their underlying type with their own credentials and baseURL.
- *
- * Moonshot is intentionally omitted: `@ai-sdk/openai-compatible` is shared
- * by many unrelated providers and cannot be auto-detected by npm alone.
- */
-const NPM_TO_TYPE: Record<string, ScannableProviderType> = {
+/** Unambiguous V2 provider packages that identify the API dialect. */
+const PACKAGE_TO_TYPE: Record<string, ScannableProviderType> = {
   "@ai-sdk/anthropic": "anthropic",
   "@ai-sdk/github-copilot": "copilot",
   "@ai-sdk/openai": "openai",
   "@ai-sdk/xai": "xai",
+  "@opencode/ai/providers/anthropic": "anthropic",
+  "@opencode/ai/providers/anthropic-compatible": "anthropic",
+  "@opencode/ai/providers/moonshot": "moonshot",
+  "@opencode/ai/providers/openai": "openai",
+  "@opencode/ai/providers/xai": "xai",
+  "aisdk:@ai-sdk/anthropic": "anthropic",
+  "aisdk:@ai-sdk/github-copilot": "copilot",
+  "aisdk:@ai-sdk/openai": "openai",
+  "aisdk:@ai-sdk/xai": "xai",
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
-/**
- * Identify which adapter type should serve a given provider.
- *
- * 1. Match the canonical OpenCode provider ID (covers the common case).
- * 2. Fall back to matching any model's `api.npm` against the unambiguous
- *    SDK packages (covers custom-renamed providers like `openai-prod`).
- *
- * Returns `null` if neither matches; the provider will be ignored.
- */
-const detectProviderType = (provider: ProviderDataLike): ScannableProviderType | null => {
-  const byID = PROVIDER_TYPES_BY_ID[provider.id];
-  if (byID) {
-    return byID;
+const detectByID = (id: string | undefined): ScannableProviderType | null =>
+  id ? (PROVIDER_TYPES_BY_ID[id] ?? null) : null;
+
+const detectByPackage = (packageName: string | undefined): ScannableProviderType | null =>
+  packageName ? (PACKAGE_TO_TYPE[packageName] ?? null) : null;
+
+/** Identify the adapter for a V2 provider and its model runtime overrides. */
+const detectProviderType = (
+  provider: Pick<ProviderData, "canonical" | "id" | "package">,
+  models: Pick<ProviderModel, "package">[] = [],
+): ScannableProviderType | null => {
+  const direct = detectByID(provider.id) ?? detectByID(provider.canonical);
+  if (direct) {
+    return direct;
   }
 
-  for (const model of Object.values(provider.models)) {
-    const byNpm = NPM_TO_TYPE[model.api.npm];
-    if (byNpm) {
-      return byNpm;
+  const providerPackage = detectByPackage(provider.package);
+  if (providerPackage) {
+    return providerPackage;
+  }
+
+  for (const model of models) {
+    const modelPackage = detectByPackage(model.package);
+    if (modelPackage) {
+      return modelPackage;
     }
   }
 

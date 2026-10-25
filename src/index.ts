@@ -1,247 +1,38 @@
-import { ActiveModel, ProviderResolution } from "./types.js";
-import { Plugin, PluginInput, tool } from "@opencode-ai/plugin";
-import {
-  ProviderData,
-  ScannedResolution,
-  formatNoProviderError,
-  formatUnsupportedProviderError,
-  scanProviders,
-} from "./config.js";
-import { dispatchErrorMessage, dispatchSearch } from "./providers/index.js";
-import { getCurrentMonthYear } from "./helpers.js";
-import { resolveChatGPTCredentials } from "./providers/chatgpt/auth.js";
-import { resolveCopilotCredentials } from "./providers/copilot/auth.js";
-import { resolveXAIOAuthCredentials } from "./providers/xai/auth.js";
+import { Plugin } from "@opencode/plugin";
+
+import { dispatchSearch } from "./providers/index.js";
+import { resolveSearchRoute } from "./config.js";
 
 // ── Constants ──────────────────────────────────────────────────────────
 
-const CANONICAL_COPILOT_ID = "github-copilot";
-const CANONICAL_OPENAI_ID = "openai";
-const CANONICAL_XAI_ID = "xai";
-const MIN_QUERY_LENGTH = 2;
-const NO_RESOLUTIONS = 0;
-
-// ── Types ──────────────────────────────────────────────────────────────
-
-interface PickedModel {
-  modelID: string;
-  resolution: ProviderResolution;
-}
-
-// ── Lookup ─────────────────────────────────────────────────────────────
-
-const findActive = (
-  active: ActiveModel,
-  resolutions: ProviderResolution[],
-): ProviderResolution | null =>
-  resolutions.find((resolution) => resolution.providerID === active.providerID) ?? null;
-
-const findFirstWithKey = (
-  resolutions: ProviderResolution[],
-  key: "fallbackModel" | "lockedModel",
-): ProviderResolution | null => resolutions.find((resolution) => Boolean(resolution[key])) ?? null;
-
-/**
- * Pick the (model, resolution) pair to use for a web search call.
- *
- * Priority:
- * 1. Locked model (`"websearch": "always"`) on any provider
- * 2. Active model if its provider is in the resolution list
- * 3. Fallback model (`"websearch": "auto"`) on any provider
- *
- * Within a tier, providers are walked in OpenCode config insertion order.
- */
-const pickModel = (
-  resolutions: ProviderResolution[],
-  active: ActiveModel | undefined,
-): PickedModel | null => {
-  const locked = findFirstWithKey(resolutions, "lockedModel");
-  if (locked?.lockedModel) {
-    return { modelID: locked.lockedModel, resolution: locked };
-  }
-
-  if (active) {
-    const direct = findActive(active, resolutions);
-    if (direct) {
-      return { modelID: active.modelID, resolution: direct };
-    }
-  }
-
-  const fallback = findFirstWithKey(resolutions, "fallbackModel");
-  if (fallback?.fallbackModel) {
-    return { modelID: fallback.fallbackModel, resolution: fallback };
-  }
-
-  return null;
-};
-
-// ── Resolution loading ─────────────────────────────────────────────────
-
-const hasCredentials = (resolution: ScannedResolution): resolution is ProviderResolution =>
-  resolution.credentials !== null;
-
-const attachChatGPTCredentials = async (
-  client: PluginInput["client"],
-  directory: string,
-  scanned: ScannedResolution[],
-): Promise<void> => {
-  const chatgpt = await resolveChatGPTCredentials(client, directory);
-  const canonical = scanned.find((resolution) => resolution.providerID === CANONICAL_OPENAI_ID);
-  if (chatgpt && canonical && !canonical.credentials?.baseURL) {
-    canonical.credentials = chatgpt;
-    canonical.type = "chatgpt";
-  }
-};
-
-const attachCopilotCredentials = async (
-  client: PluginInput["client"],
-  directory: string,
-  scanned: ScannedResolution[],
-): Promise<void> => {
-  const copilot = await resolveCopilotCredentials(client, directory);
-  if (!copilot) {
-    return;
-  }
-
-  const canonical = scanned.find((resolution) => resolution.providerID === CANONICAL_COPILOT_ID);
-  if (canonical && !canonical.credentials?.baseURL) {
-    canonical.credentials = copilot;
-  } else if (!canonical) {
-    scanned.push({
-      credentials: copilot,
-      providerID: CANONICAL_COPILOT_ID,
-      type: "copilot",
-    });
-  }
-};
-
-const attachXAICredentials = async (
-  client: PluginInput["client"],
-  directory: string,
-  scanned: ScannedResolution[],
-): Promise<void> => {
-  // OpenCode exposes a dummy provider key for SuperGrok and injects the real
-  // OAuth token through fetch, so replace that key with our equivalent wrapper.
-  const xai = await resolveXAIOAuthCredentials(client, directory);
-  if (!xai) {
-    return;
-  }
-
-  const canonical = scanned.find((resolution) => resolution.providerID === CANONICAL_XAI_ID);
-  if (canonical) {
-    canonical.credentials = { ...xai, baseURL: canonical.credentials?.baseURL };
-  } else {
-    scanned.push({ credentials: xai, providerID: CANONICAL_XAI_ID, type: "xai" });
-  }
-};
-
-const loadResolutions = async (
-  client: PluginInput["client"],
-  directory: string,
-): Promise<ProviderResolution[]> => {
-  const { data } = await client.config.providers();
-  if (!data) {
-    return [];
-  }
-
-  const scanned = scanProviders(data.providers as ProviderData[]);
-
-  /*
-   * ChatGPT OAuth shadows the canonical `openai` provider when it has no
-   * explicit baseURL. This covers two cases:
-   *   - a configured `openai` provider with apiKey but no baseURL: OAuth
-   *     replaces the apiKey and the type flips to `"chatgpt"`.
-   *   - a credential-less `openai` block configured only for `websearch`
-   *     flags: OAuth fills in the credentials, preserving those flags.
-   *
-   * Custom-renamed openai-typed providers (e.g. `openai-prod`) keep their
-   * own credentials because their explicit baseURL would not authenticate
-   * against ChatGPT OAuth tokens.
-   */
-  await attachChatGPTCredentials(client, directory, scanned);
-
-  /*
-   * Copilot OAuth credentials fill in the canonical `github-copilot`
-   * resolution when it has no explicit baseURL — a user with a custom
-   * Copilot proxy keeps their config. Same optional-chain guard handles
-   * the credential-less `"websearch"`-flags-only case. If no canonical
-   * resolution exists at all, we synthesize one so OAuth-only users can
-   * still web-search via Copilot without an opencode.json entry.
-   */
-  await attachCopilotCredentials(client, directory, scanned);
-  await attachXAICredentials(client, directory, scanned);
-
-  return scanned.filter(hasCredentials);
-};
+const PLUGIN_ID = "opencode-websearch";
+const PROVIDER_ID = "native";
+const PROVIDER_NAME = "Model-native search";
 
 // ── Plugin ─────────────────────────────────────────────────────────────
 
 // oxlint-disable-next-line import/no-default-export -- plugin entry point requires default export
-export default (async (input) => {
-  let resolutions: ProviderResolution[] | null = null;
-  const activeModels = new Map<string, ActiveModel>();
+export default Plugin.define({
+  id: PLUGIN_ID,
+  async setup(ctx) {
+    await ctx.websearch.transform((editor) => {
+      editor.add({
+        execute: async ({ query }, { signal }) => {
+          const route = await resolveSearchRoute(ctx);
+          return dispatchSearch(
+            route.resolution.type,
+            { ...route.resolution.credentials, model: route.modelID },
+            query,
+            signal,
+          );
+        },
+        id: PROVIDER_ID,
+        name: PROVIDER_NAME,
+      });
 
-  return {
-    "chat.message": async (hookInput) => {
-      if (hookInput.model) {
-        activeModels.set(hookInput.sessionID, {
-          modelID: hookInput.model.modelID,
-          providerID: hookInput.model.providerID,
-        });
+      if (editor.default.get() === undefined) {
+        editor.default.set(PROVIDER_ID);
       }
-    },
-
-    tool: {
-      "web-search": tool({
-        args: {
-          query: tool.schema.string().min(MIN_QUERY_LENGTH).describe("The search query to use"),
-        },
-        description: `- Allows OpenCode to search the web and use the results to inform responses
-- Provides up-to-date information for current events and recent data
-- Returns search result information formatted as search result blocks, including links as markdown hyperlinks
-- Use this tool for accessing information beyond the model's knowledge cutoff
-- Searches are performed automatically within a single API call
-
-CRITICAL REQUIREMENT - You MUST follow this:
-  - After answering the user's question, you MUST include a "Sources:" section at the end of your response
-  - In the Sources section, list all relevant URLs from the search results as markdown hyperlinks: [Title](URL)
-  - This is MANDATORY - never skip including sources in your response
-  - Example format:
-
-    [Your answer here]
-
-    Sources:
-    - [Source Title 1](https://example.com/1)
-    - [Source Title 2](https://example.com/2)
-
-Usage notes:
-IMPORTANT - Use the correct year in search queries:
-  - It is currently ${getCurrentMonthYear()}. You MUST use this when searching for recent information, documentation, or current events.
-  - Example: If the user asks for "latest React docs", search for "React documentation" with the current year, NOT last year`,
-
-        async execute(args, context) {
-          resolutions ??= await loadResolutions(input.client, input.directory);
-
-          const active = activeModels.get(context.sessionID);
-          const picked = pickModel(resolutions, active);
-
-          if (!picked) {
-            return resolutions.length === NO_RESOLUTIONS
-              ? formatNoProviderError()
-              : formatUnsupportedProviderError(active?.modelID ?? "unknown");
-          }
-
-          try {
-            return await dispatchSearch(
-              picked.resolution.type,
-              { ...picked.resolution.credentials, model: picked.modelID },
-              args.query,
-            );
-          } catch (error) {
-            return dispatchErrorMessage(picked.resolution.type, error);
-          }
-        },
-      }),
-    },
-  };
-}) satisfies Plugin;
+    });
+  },
+});
