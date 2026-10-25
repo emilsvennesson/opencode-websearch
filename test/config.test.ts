@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { pickModel, scanProviders } from "../src/config.js";
+import { pickModel, scanProviders, withModelRuntime } from "../src/config.js";
 import { ProviderResolution } from "../src/types.js";
 
 const SINGLE_RESULT = 1;
@@ -95,5 +95,32 @@ describe("V2 provider scanning", () => {
 
     const [first] = scanned;
     expect(first?.lockedModel).toBeUndefined();
+  });
+});
+
+describe("picked model runtime", () => {
+  test("attaches the picked model's own base URL", () => {
+    const picked = withModelRuntime(
+      {
+        modelID: "claude-haiku-5-5",
+        resolution: resolution("opencode-go", { type: "opencode-go" }),
+      },
+      [
+        {
+          enabled: true,
+          modelID: "claude-haiku-5-5",
+          providerID: "other",
+          settings: { baseURL: "https://other.example.com" },
+        },
+        {
+          enabled: true,
+          modelID: "claude-haiku-5-5",
+          providerID: "opencode-go",
+          settings: { baseURL: "https://opencode.ai/inference/go/anthropic/v1" },
+        },
+      ],
+    );
+
+    expect(picked.modelBaseURL).toBe("https://opencode.ai/inference/go/anthropic/v1");
   });
 });

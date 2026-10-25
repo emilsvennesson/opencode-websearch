@@ -153,9 +153,12 @@ const pickModel = (
 const hasResolution = (resolution: ProviderResolution | null): resolution is ProviderResolution =>
   resolution !== null;
 
-const loadResolutions = async (ctx: Plugin.Context): Promise<ProviderResolution[]> => {
-  const [providers, models] = await Promise.all([ctx.provider.list(), ctx.model.list()]);
-  const scanned = scanProviders(providers.data, models.data);
+const loadResolutions = async (
+  ctx: Plugin.Context,
+  providers: ProviderData[],
+  models: ProviderModel[],
+): Promise<ProviderResolution[]> => {
+  const scanned = scanProviders(providers, models);
   const resolutions = await Promise.all(
     scanned.map(async (current): Promise<ProviderResolution | null> => {
       const resolved = await resolveCredentials(
@@ -171,6 +174,7 @@ const loadResolutions = async (ctx: Plugin.Context): Promise<ProviderResolution[
       return {
         credentials: resolved.credentials,
         fallbackModel: current.fallbackModel,
+        headers: current.provider.headers,
         lockedModel: current.lockedModel,
         providerID: current.provider.id,
         type: resolved.type,
@@ -184,7 +188,7 @@ const loadResolutions = async (ctx: Plugin.Context): Promise<ProviderResolution[
 // ── Errors ─────────────────────────────────────────────────────────────
 
 const formatNoProviderError = (): string =>
-  `Error: websearch requires an Anthropic, OpenAI, Moonshot, xAI, or GitHub Copilot provider.
+  `Error: websearch requires an Anthropic, OpenAI, Moonshot, xAI, Z.ai, DeepSeek, OpenCode Go, or GitHub Copilot provider.
 
 No supported provider credentials were found. Connect a supported provider with /connect, or configure its API key and reload OpenCode.`;
 
@@ -195,14 +199,26 @@ Change the default model, or set "websearch" to "auto" in a supported model's se
 
 // ── Public API ─────────────────────────────────────────────────────────
 
+/** Attach the picked model's endpoint, which can differ per model on multi-API providers. */
+const withModelRuntime = (picked: PickedModel, models: ProviderModel[]): PickedModel => {
+  const model = models.find(
+    (candidate) =>
+      candidate.providerID === picked.resolution.providerID && candidate.modelID === picked.modelID,
+  );
+
+  return { ...picked, modelBaseURL: extractStringOption(model?.settings, "baseURL") };
+};
+
 const resolveSearchRoute = async (ctx: Plugin.Context): Promise<PickedModel> => {
-  const [resolutions, defaultModel] = await Promise.all([
-    loadResolutions(ctx),
+  const [providers, models, defaultModel] = await Promise.all([
+    ctx.provider.list(),
+    ctx.model.list(),
     ctx.model.default(),
   ]);
+  const resolutions = await loadResolutions(ctx, providers.data, models.data);
   const picked = pickModel(resolutions, defaultModel.data);
   if (picked) {
-    return picked;
+    return withModelRuntime(picked, models.data);
   }
 
   if (resolutions.length === NO_RESOLUTIONS) {
@@ -212,4 +228,4 @@ const resolveSearchRoute = async (ctx: Plugin.Context): Promise<PickedModel> => 
   throw new Error(formatUnsupportedProviderError(defaultModel.data?.modelID ?? UNKNOWN_MODEL));
 };
 
-export { pickModel, resolveSearchRoute, scanProviders };
+export { pickModel, resolveSearchRoute, scanProviders, withModelRuntime };

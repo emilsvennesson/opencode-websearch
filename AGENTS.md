@@ -67,7 +67,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ## Project
 
-OpenCode V2 plugin that registers a `native` backend for the built-in `websearch` tool, using the configured provider's own web search (Anthropic, OpenAI/ChatGPT, GitHub Copilot, xAI, Moonshot). TypeScript, built and tested with Bun.
+OpenCode V2 plugin that registers a `native` backend for the built-in `websearch` tool, using the configured provider's own web search (Anthropic, OpenAI/ChatGPT, GitHub Copilot, xAI, Moonshot, Z.ai, DeepSeek, OpenCode Go). TypeScript, built and tested with Bun.
 
 - `src/index.ts` is the plugin entry point; each provider lives in `src/providers/<name>/`.
 - `bun run check` runs format check, lint, typecheck, and tests. It must pass before committing.

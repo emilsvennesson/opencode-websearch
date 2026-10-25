@@ -25,6 +25,21 @@ describe("V2 provider detection", () => {
     ).toBe("copilot");
   });
 
+  test("detects OpenCode Go by ID before its per-model Anthropic packages", () => {
+    expect(
+      detectProviderType(
+        { id: "opencode-go", package: "@opencode/ai/providers/openai-compatible" },
+        [{ package: "@opencode/ai/providers/anthropic" }],
+      ),
+    ).toBe("opencode-go");
+  });
+
+  test("detects Z.ai, its Coding Plan, and DeepSeek by ID", () => {
+    expect(detectProviderType({ id: "zai", package: "" })).toBe("zai");
+    expect(detectProviderType({ id: "zai-coding-plan", package: "" })).toBe("zai");
+    expect(detectProviderType({ id: "deepseek", package: "" })).toBe("deepseek");
+  });
+
   test("does not infer a provider from a generic compatible package", () => {
     expect(
       detectProviderType({

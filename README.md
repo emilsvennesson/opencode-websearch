@@ -19,13 +19,16 @@ The latest release is Bun v1.4.4, marked "Latest" and tagged bun-v1.4.4. Earlier
 
 ## Supported providers
 
-| Provider         | Search                                                                   |
-| ---------------- | ------------------------------------------------------------------------ |
-| Anthropic        | `web_search_20260318` with dynamic filtering, falling back to `20250305` |
-| OpenAI / ChatGPT | Responses API `web_search`                                               |
-| GitHub Copilot   | Responses API `web_search`                                               |
-| xAI (Grok)       | Responses API `web_search`                                               |
-| Moonshot (Kimi)  | Web Search Pro API (`/v1/tools/search_pro`)                              |
+| Provider         | Search                                                                      |
+| ---------------- | --------------------------------------------------------------------------- |
+| Anthropic        | `web_search_20260318` with dynamic filtering, falling back to `20250305`    |
+| OpenAI / ChatGPT | Responses API `web_search`                                                  |
+| GitHub Copilot   | Responses API `web_search`                                                  |
+| xAI (Grok)       | Responses API `web_search`                                                  |
+| Moonshot (Kimi)  | Web Search Pro API (`/v1/tools/search_pro`)                                 |
+| Z.ai (GLM)       | Web Search API (`/api/paas/v4/web_search`), including the Coding Plan       |
+| DeepSeek         | Search API (`/v1/tools/search`)                                             |
+| OpenCode Go      | The model's own search: Claude, GPT, Grok, and Kimi models only (see below) |
 
 ## Install
 
@@ -66,6 +69,31 @@ The current session's model is not used.
   },
 }
 ```
+
+## OpenCode Go
+
+OpenCode Go serves each model through its own upstream, and only some of them run web search. Claude, GPT, Grok, and Kimi models search the web; GLM, DeepSeek, Qwen, MiniMax, and the other Go models ignore the search tool, so the plugin returns an error instead of an unsearched answer.
+
+Because the default model is often one that can't search, pin web search to a supported Go model such as `gpt-6-luna`:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "opencode-go": {
+      "models": {
+        "gpt-6-luna": {
+          "options": {
+            "websearch": "always",
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+Searches count toward your Go usage limits like any other request. `gpt-6-luna` and `claude-haiku-5-5` are inexpensive choices; Grok searches cost many times more. Kimi on Go uses Moonshot's `$web_search` tool, which Moonshot has deprecated, so it may stop working without notice.
 
 ## Development
 
