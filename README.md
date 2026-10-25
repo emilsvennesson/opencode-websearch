@@ -32,20 +32,13 @@ The latest release is Bun v1.4.4, marked "Latest" and tagged bun-v1.4.4. Earlier
 
 ## Install
 
-Add the plugin to `opencode.jsonc`:
+Install with the OpenCode CLI:
 
-<!-- x-release-please-start-version -->
-
-```jsonc
-{
-  "$schema": "https://opencode.ai/config.json",
-  "plugins": ["opencode-websearch@0.7.0"],
-}
+```sh
+opencode plugin add opencode-websearch
 ```
 
-<!-- x-release-please-end -->
-
-OpenCode doesn't update plugins automatically. To upgrade, change the version number; OpenCode reloads the plugin when you save.
+This installs the plugin and adds it to your global config. To upgrade, run `opencode plugin update`.
 
 The plugin is enabled automatically unless you've chosen another `websearch` provider or turned web search off. To select it explicitly:
 
