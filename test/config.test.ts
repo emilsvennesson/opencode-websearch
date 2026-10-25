@@ -16,10 +16,10 @@ const resolution = (
 });
 
 describe("model selection", () => {
-  test("prefers a locked model over the default and fallback", () => {
+  test("prefers a locked model over the default", () => {
     const picked = pickModel(
       [
-        resolution("openai", { fallbackModel: "gpt-fallback" }),
+        resolution("openai"),
         resolution("anthropic", { lockedModel: "claude-search", type: "anthropic" }),
       ],
       { modelID: "gpt-default", providerID: "openai" },
@@ -30,7 +30,7 @@ describe("model selection", () => {
   });
 
   test("uses the V2 default model when its provider is supported", () => {
-    const picked = pickModel([resolution("openai", { fallbackModel: "gpt-fallback" })], {
+    const picked = pickModel([resolution("openai")], {
       modelID: "gpt-default",
       providerID: "openai",
     });
@@ -38,13 +38,13 @@ describe("model selection", () => {
     expect(picked?.modelID).toBe("gpt-default");
   });
 
-  test("falls back when the default provider is unsupported", () => {
-    const picked = pickModel([resolution("openai", { fallbackModel: "gpt-fallback" })], {
+  test("picks nothing when the default provider is unsupported and no model is locked", () => {
+    const picked = pickModel([resolution("openai")], {
       modelID: "other-default",
       providerID: "other",
     });
 
-    expect(picked?.modelID).toBe("gpt-fallback");
+    expect(picked).toBeNull();
   });
 });
 
@@ -67,9 +67,9 @@ describe("V2 provider scanning", () => {
         },
         {
           enabled: true,
-          modelID: "gpt-fallback-upstream",
+          modelID: "gpt-second-upstream",
           providerID: "openai",
-          settings: { websearch: "auto" },
+          settings: { websearch: "always" },
         },
       ],
     );
@@ -77,7 +77,6 @@ describe("V2 provider scanning", () => {
     const [first] = scanned;
     expect(scanned).toHaveLength(SINGLE_RESULT);
     expect(first?.lockedModel).toBe("gpt-upstream");
-    expect(first?.fallbackModel).toBe("gpt-fallback-upstream");
   });
 
   test("ignores models disabled in V2", () => {
