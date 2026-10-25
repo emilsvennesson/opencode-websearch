@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.7.1](https://github.com/emilsvennesson/opencode-websearch/compare/v0.7.0...v0.7.1) (2026-10-25)
+
+
+### Bug Fixes
+
+* support only OpenCode V2 config and package names ([#36](https://github.com/emilsvennesson/opencode-websearch/issues/36)) ([cee6dcb](https://github.com/emilsvennesson/opencode-websearch/commit/cee6dcbb9d176a31a2550823b8b65479a983d311))
+
+
+### Documentation
+
+* use the opencode CLI to install and upgrade ([#34](https://github.com/emilsvennesson/opencode-websearch/issues/34)) ([d4cdc51](https://github.com/emilsvennesson/opencode-websearch/commit/d4cdc5182016516a75896617692d51b45108ef5b))
+
 ## [0.7.0](https://github.com/emilsvennesson/opencode-websearch/compare/v0.6.0...v0.7.0) (2026-10-25)
 
 
