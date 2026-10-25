@@ -52,7 +52,7 @@ The plugin is enabled automatically unless you've chosen another `websearch` pro
 
 Searches use your default model when its provider is supported. The current session's model is never used.
 
-To search with a specific model instead, set `"websearch": "always"` in its options. This is useful when:
+To search with a specific model instead, set `"websearch": "always"` in its settings. This is useful when:
 
 - Your default model can't search, for example because its provider isn't supported or it's an OpenCode Go model without web search.
 - You want searches to run on a cheaper or faster model than the one you code with.
@@ -61,11 +61,11 @@ To search with a specific model instead, set `"websearch": "always"` in its opti
 ```jsonc
 {
   "$schema": "https://opencode.ai/config.json",
-  "provider": {
+  "providers": {
     "opencode-go": {
       "models": {
         "gpt-6-luna": {
-          "options": {
+          "settings": {
             "websearch": "always",
           },
         },
