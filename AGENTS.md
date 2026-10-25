@@ -1,163 +1,75 @@
 # AGENTS.md
 
-OpenCode plugin that provides web search via provider web search APIs.
-Supports multiple providers (Anthropic, OpenAI, GitHub Copilot, Moonshot, xAI). Multi-file TypeScript project built with Bun, linted with oxlint.
+Behavioral guidelines to reduce common LLM coding mistakes.
 
-## Commands
+**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
 
-```sh
-bun install          # install dependencies
-bun run format       # oxfmt (auto-format source files in place)
-bun run format:check # oxfmt --check (verify formatting, no changes)
-bun run lint         # oxlint (with tsconfig, unicorn/typescript/import/oxc plugins)
-bun run lint:fix     # oxlint --fix (auto-fix lint issues)
-bun run test         # bun:test unit tests
-bun run typecheck    # tsc --noEmit
-bun run check        # format:check + lint + typecheck + tests (the full quality gate)
-bun run build        # bun build (ESM bundle) + tsc (declaration files) → dist/
+## 1. Think Before Coding
+
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
+
+Before implementing:
+
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them - don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+## 2. Simplicity First
+
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+## 3. Surgical Changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it - don't delete it.
+
+When your changes create orphans:
+
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: Every changed line should trace directly to the user's request.
+
+## 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan:
+
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
 ```
 
-Tests use `bun:test` (built into Bun).
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
-## Project structure
+## Project
 
-```
-src/
-  index.ts              # V2 Plugin.define entry point and native websearch backend
-  auth.ts               # V2 integration and OAuth credential resolution
-  config.ts             # V2 provider/model scanning and default-model routing
-  types.ts              # shared provider, routing, and credential types
-  providers/
-    index.ts            # provider dispatch map, result parsing, and error labels
-    registry.ts         # V2 provider/package detection helpers
-    anthropic/
-      index.ts          # Anthropic web search tool with structured output and version fallback
-    chatgpt/
-      constants.ts      # ChatGPT endpoint and client constants
-      index.ts          # ChatGPT streaming Responses search
-    copilot/
-      constants.ts      # Copilot-specific constants
-      index.ts          # Copilot Responses search with Copilot headers
-    moonshot/
-      index.ts          # Moonshot Web Search Pro API (no model)
-    openai/
-      index.ts          # OpenAI Responses search
-    xai/
-      index.ts          # xAI Responses search
-    shared/
-      errors.ts         # HTTP error and search error formatting
-      openai-compatible.ts # OpenAI client and shared structured Responses search
-      search.ts         # system prompt, result JSON schema, and result validation
-dist/                   # build output (gitignored)
-test/                   # bun:test unit tests
-.oxlintrc.json          # oxlint configuration
-tsconfig.json           # TypeScript config (strict, ESNext)
-package.json            # Bun-based project, ESM module
-server.js               # V2 directory-package entry point (re-exports dist/index.js)
-```
+OpenCode V2 plugin that registers a `native` backend for the built-in `websearch` tool, using the configured provider's own web search (Anthropic, OpenAI/ChatGPT, GitHub Copilot, xAI, Moonshot). TypeScript, built and tested with Bun.
 
-## Code style
-
-### Functions
-
-- Use **arrow functions** assigned to `const`. No `function` declarations.
-- Keep functions small: **20 statements max** per function (`max-statements` rule).
-  Break larger logic into focused helper functions.
-- **5 parameters max** per function (`max-params` rule). Group related params
-  into a context/options interface when you need more.
-
-### Variables and constants
-
-- **No magic numbers.** Extract every numeric literal to a named `UPPER_SNAKE_CASE`
-  constant (e.g. `EMPTY_LENGTH = 0`, `PAD_LENGTH = 2`, `MAX_RESPONSE_TOKENS = 16_000`).
-- Local variables: `camelCase`.
-- Module-level constants: `UPPER_SNAKE_CASE`.
-
-### Types and interfaces
-
-- Use `interface` for object shapes. PascalCase, no `I` prefix.
-- Sort interface properties alphabetically (enforced by `sort-keys`).
-- Use `satisfies` for type-safe inference where possible (e.g. `satisfies Plugin`).
-- TypeScript strict mode is enabled. Do not use `any`; prefer `unknown` and narrow.
-
-### Imports
-
-- Plain `import { Foo }` for everything (types included). No `import type`.
-- Use `node:` prefix for Node.js builtins (`node:fs`, `node:os`, `node:path`).
-- Imports are sorted by `sort-imports` rule: multiline `{ ... }` blocks first,
-  then single-line, alphabetical by first member name within each group.
-- Alphabetize members within an import (`{ existsSync, readFileSync }`).
-
-### Control flow
-
-- Ternary expressions are allowed when they make code clearer. Use `if`/`else` blocks for multi-statement branches.
-- Always use **braces** with `if`/`else`/`for`/`while` (enforced by `curly`).
-- Prefer `continue` in loops to skip irrelevant iterations and reduce nesting.
-
-### Strings
-
-- Double quotes for strings.
-- Use template literals for interpolation.
-- Use `"utf8"` (not `"utf-8"`) for encoding identifiers (unicorn rule).
-
-### Object literals
-
-- Sort keys alphabetically (enforced by `sort-keys`).
-
-### Error handling
-
-- Catch variables must be named `error` (unicorn `catch-error-name` rule).
-- Use `instanceof` to narrow error types: check specific classes first
-  (`APIError`, `SyntaxError`), then `Error`, then fall back to `String(error)`.
-- Return error strings from tool `execute()` rather than throwing.
-
-### Exports
-
-- `src/index.ts` uses a single `export default Plugin.define(...)` — the V2 plugin entry point.
-- Internal modules use a grouped `export { ... }` at the end of the file.
-- The plugin registers a native backend through `ctx.websearch.transform(...)`.
-
-### Comments
-
-- Use `// ── Section Name ──────...` divider comments to separate logical sections
-  (Types, Constants, Helpers, Config resolution, Response formatting, Plugin).
-- Use `oxlint-disable-next-line <rule> -- <reason>` when suppressing a lint rule.
-  Always include the reason.
-
-## Linter configuration
-
-oxlint with plugins: `unicorn`, `typescript`, `import`, `oxc`.
-
-| Category    | Level |
-| ----------- | ----- |
-| correctness | error |
-| suspicious  | warn  |
-| perf        | warn  |
-| style       | warn  |
-
-Key rules that shape the code:
-
-- `no-magic-numbers`, `max-statements` (20), `max-params` (5)
-- `curly`, `sort-keys`, `sort-imports`
-- `func-style` (expressions only), `init-declarations`, `id-length` (min 2)
-- `unicorn/catch-error-name`, `unicorn/text-encoding-identifier-case`
-- `typescript/no-unused-vars` (error)
-
-Disabled rules (with rationale):
-
-- `unicorn/no-null` -- null is used intentionally alongside undefined
-- `unicorn/prefer-top-level-await` -- plugin is a function export, not a script
-- `unicorn/filename-case` -- PascalCase not enforced on filenames
-- `unicorn/prevent-abbreviations` -- short names like `ctx`, `env`, `url` are clear
-- `no-continue` -- `continue` is cleaner than empty if-branches or deep nesting in loops
-- `unicorn/prefer-ternary` -- ternaries are allowed but not required
-- `import/no-nodejs-modules` -- Node.js builtins are allowed in the plugin runtime
-- `import/no-named-export` -- internal modules use named exports
-- `import/prefer-default-export` -- internal modules use named exports, not default
-- `import/consistent-type-specifier-style` -- no `import type` used
-- `typescript/consistent-type-imports` -- no `import type` used
-
-## Dependencies
-
-- **Runtime:** `@opencode/plugin` -- OpenCode V2 plugin SDK, `@anthropic-ai/sdk` -- Anthropic API client, `openai` -- OpenAI API client
-- **Dev:** `oxfmt`, `oxlint`, `typescript`, `@types/bun`
+- `src/index.ts` is the plugin entry point; each provider lives in `src/providers/<name>/`.
+- `bun run check` runs format check, lint, typecheck, and tests. It must pass before committing.
+- Lint is oxlint (`.oxlintrc.json`), formatting is oxfmt. Follow the style of the surrounding code; the linter enforces the rest.
+- Use [Conventional Commits](https://www.conventionalcommits.org/) for commit messages and PR titles (`feat:`, `fix:`, `docs:`, `chore:`, ...). Releases are generated from them by release-please.
