@@ -47,7 +47,7 @@ Add the plugin to `opencode.jsonc`:
 
 OpenCode doesn't update plugins on its own, and a pinned version stays put. To upgrade, change the version and save; OpenCode reloads the plugin.
 
-It becomes the default `websearch` provider, unless you've chosen another provider or turned web search off. To select it explicitly:
+The plugin is enabled automatically unless you've chosen another `websearch` provider or turned web search off. To select it explicitly:
 
 ```jsonc
 {
