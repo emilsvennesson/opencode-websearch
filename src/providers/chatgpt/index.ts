@@ -29,7 +29,7 @@ const buildHeaders = (config: SearchConfig): Record<string, string> => ({
   ...(config.accountId ? { "chatgpt-account-id": config.accountId } : {}),
 });
 
-// The ChatGPT Codex endpoint only accepts streamed, unstored Responses requests.
+// ChatGPT token sharing and Codex require streamed, unstored Responses requests.
 const buildRequestBody = (config: SearchConfig, query: string): Record<string, unknown> => ({
   input: [{ content: [{ text: buildSearchInput(query), type: "input_text" }], role: "user" }],
   instructions: SEARCH_SYSTEM_PROMPT,

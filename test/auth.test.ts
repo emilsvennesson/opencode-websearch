@@ -61,6 +61,86 @@ describe("V2 credential resolution", () => {
     });
   });
 
+  test.each(["chatgpt-browser", "chatgpt-headless", "chatgpt-token-sharing"])(
+    "routes %s OAuth with the resolved default API URL",
+    async (methodID) => {
+      const result = await resolveCredentials(
+        createContext({ ...oauth(), methodID }),
+        {
+          id: "openai",
+          integrationID: "openai",
+          package: "@opencode/ai/providers/openai/responses",
+        },
+        "openai",
+        { baseURL: "https://api.openai.com/v1/" },
+      );
+
+      expect(result).toEqual({
+        credentials: {
+          accountId: undefined,
+          apiKey: "access-token",
+          baseURL:
+            methodID === "chatgpt-token-sharing"
+              ? "https://api.openai.com/v1"
+              : "https://chatgpt.com/backend-api/codex",
+        },
+        type: "chatgpt",
+      });
+    },
+  );
+
+  test("routes token-sharing OAuth to the API when no base URL is set", async () => {
+    const result = await resolveCredentials(
+      createContext({ ...oauth(), methodID: "chatgpt-token-sharing" }),
+      { id: "openai", integrationID: "openai", package: "@opencode/ai/providers/openai/responses" },
+      "openai",
+      {},
+    );
+
+    expect(result).toMatchObject({
+      credentials: { apiKey: "access-token", baseURL: "https://api.openai.com/v1" },
+      type: "chatgpt",
+    });
+  });
+
+  test.each(["chatgpt-browser", "chatgpt-token-sharing"])(
+    "preserves custom endpoint handling for %s OAuth",
+    async (methodID) => {
+      const ctx = createContext({ ...oauth(), methodID });
+      const provider = {
+        id: "openai",
+        integrationID: "openai",
+        package: "@opencode/ai/providers/openai/responses",
+      };
+      const baseURL = "https://proxy.example.com/v1";
+
+      expect(await resolveCredentials(ctx, provider, "openai", { baseURL })).toBeNull();
+      expect(
+        await resolveCredentials(ctx, provider, "openai", {
+          apiKey: "proxy-key",
+          baseURL,
+        }),
+      ).toEqual({
+        credentials: { apiKey: "proxy-key", baseURL },
+        type: "openai",
+      });
+    },
+  );
+
+  test("keeps OpenAI API-key connections on the OpenAI adapter", async () => {
+    const result = await resolveCredentials(
+      createContext({ key: "api-key", type: "key" }),
+      { id: "openai", integrationID: "openai", package: "@opencode/ai/providers/openai/responses" },
+      "openai",
+      { baseURL: "https://api.openai.com/v1" },
+    );
+
+    expect(result).toEqual({
+      credentials: { apiKey: "api-key", baseURL: "https://api.openai.com/v1" },
+      type: "openai",
+    });
+  });
+
   test("uses the Copilot refresh token and discovered API endpoint", async () => {
     const result = await resolveCredentials(
       createContext(oauth({ apiEndpoint: "https://copilot.example.com/" })),

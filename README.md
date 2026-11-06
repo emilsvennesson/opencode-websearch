@@ -48,6 +48,13 @@ The plugin is enabled automatically unless you've chosen another `websearch` pro
 }
 ```
 
+## ChatGPT sign-in
+
+Both **Sign in with ChatGPT** (`chatgpt-token-sharing`) and the legacy Codex sign-in
+methods are supported. The plugin selects the endpoint for the active sign-in:
+token sharing uses `https://api.openai.com/v1/responses`, while legacy Codex uses
+`https://chatgpt.com/backend-api/codex/responses`. No separate API key is needed.
+
 ## Model selection
 
 Searches use your default model when its provider is supported. The current session's model is never used.

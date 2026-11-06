@@ -1,6 +1,10 @@
 import { Credential, Plugin } from "@opencode/plugin";
 
-import { CHATGPT_DEFAULT_BASE_URL } from "./providers/chatgpt/constants.js";
+import {
+  CHATGPT_DEFAULT_BASE_URL,
+  CHATGPT_TOKEN_SHARING_BASE_URL,
+  CHATGPT_TOKEN_SHARING_METHOD_ID,
+} from "./providers/chatgpt/constants.js";
 import { COPILOT_DEFAULT_BASE_URL } from "./providers/copilot/constants.js";
 import { ProviderCredentials, ProviderData, ProviderSettings, ProviderType } from "./types.js";
 
@@ -45,7 +49,8 @@ const normalizeDomain = (value: string): string =>
 const normalizeBaseURL = (value: string): string => value.replace(/\/+$/, "");
 
 const isChatGPTEndpoint = (baseURL: string | undefined): boolean =>
-  !baseURL || normalizeBaseURL(baseURL) === CHATGPT_DEFAULT_BASE_URL;
+  !baseURL ||
+  [CHATGPT_DEFAULT_BASE_URL, CHATGPT_TOKEN_SHARING_BASE_URL].includes(normalizeBaseURL(baseURL));
 
 const isCopilotEndpoint = (baseURL: string | undefined): boolean =>
   !baseURL || normalizeBaseURL(baseURL) === COPILOT_DEFAULT_BASE_URL;
@@ -82,7 +87,11 @@ const resolveOAuthCredentials = (
       credentials: {
         accountId: metadataString(credential.metadata, "accountID"),
         apiKey: credential.access,
-        baseURL: CHATGPT_DEFAULT_BASE_URL,
+        // Token-sharing OAuth targets the API; legacy OAuth targets Codex.
+        baseURL:
+          credential.methodID === CHATGPT_TOKEN_SHARING_METHOD_ID
+            ? CHATGPT_TOKEN_SHARING_BASE_URL
+            : CHATGPT_DEFAULT_BASE_URL,
       },
       type: "chatgpt",
     };
