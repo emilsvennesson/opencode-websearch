@@ -1,4 +1,5 @@
 import { Plugin } from "@opencode/plugin";
+import { z } from "zod/mini";
 
 import { resolveCredentials } from "./auth.js";
 import { detectProviderType } from "./providers/registry.js";
@@ -8,16 +9,18 @@ import {
   ProviderData,
   ProviderModel,
   ProviderResolution,
-  ProviderSettings,
   ScannableProviderType,
+  ScannedProviderSettings,
+  SearchEngine,
 } from "./types.js";
+import { SUPPORTED_SEARCH_ENGINES as COPILOT_SUPPORTED_SEARCH_ENGINES } from "./providers/copilot/constants.js";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
 interface ScannedResolution {
   lockedModel?: string;
   provider: ProviderData;
-  settings: ProviderSettings;
+  settings: ScannedProviderSettings;
   type: ScannableProviderType;
 }
 
@@ -26,6 +29,11 @@ interface ScannedResolution {
 const NO_RESOLUTIONS = 0;
 const UNKNOWN_MODEL = "unknown";
 const WEBSEARCH_ALWAYS = "always";
+const DEFAULT_SEARCH_ENGINE: SearchEngine = "native";
+
+const SUPPORTED_SEARCH_ENGINES: Partial<Record<ScannableProviderType, readonly SearchEngine[]>> = {
+  copilot: COPILOT_SUPPORTED_SEARCH_ENGINES,
+};
 
 // ── Provider scanning ──────────────────────────────────────────────────
 
@@ -37,18 +45,37 @@ const extractStringOption = (
   return typeof value === "string" && value ? value : undefined;
 };
 
+const formatInvalidWebsearchSettingError = (
+  providerID: string,
+  supported: readonly SearchEngine[],
+): string =>
+  `The "websearch" setting of provider "${providerID}" is invalid. Expected { "engine": ${supported.map((engine) => `"${engine}"`).join(" | ")} }.`;
+
+const resolveSearchEngine = (provider: ProviderData, type: ScannableProviderType): SearchEngine => {
+  const supported = SUPPORTED_SEARCH_ENGINES[type] ?? [DEFAULT_SEARCH_ENGINE];
+  const setting = z
+    .optional(z.object({ engine: z.optional(z.enum(supported)) }))
+    .safeParse(provider.settings?.websearch);
+  if (!setting.success) {
+    throw new Error(formatInvalidWebsearchSettingError(provider.id, supported));
+  }
+
+  return setting.data?.engine ?? DEFAULT_SEARCH_ENGINE;
+};
+
 const stripV1Suffix = (url: string): string => url.replace(/\/v1\/?$/, "");
 
 const normalizeBaseURL = (type: ScannableProviderType, baseURL: string): string =>
   type === "anthropic" ? stripV1Suffix(baseURL) : baseURL;
 
-const resolveSettings = (provider: ProviderData, type: ScannableProviderType): ProviderSettings => {
+const resolveSettings = (provider: ProviderData, type: ScannableProviderType): ScannedProviderSettings => {
   const apiKey = extractStringOption(provider.settings, "apiKey");
   const configuredURL = extractStringOption(provider.settings, "baseURL");
 
   return {
     apiKey,
     baseURL: configuredURL ? normalizeBaseURL(type, configuredURL) : undefined,
+    searchEngine: resolveSearchEngine(provider, type),
   };
 };
 
@@ -139,6 +166,7 @@ const loadResolutions = async (
         headers: current.provider.headers,
         lockedModel: current.lockedModel,
         providerID: current.provider.id,
+        searchEngine: current.settings.searchEngine,
         type: resolved.type,
       };
     }),
@@ -150,12 +178,12 @@ const loadResolutions = async (
 // ── Errors ─────────────────────────────────────────────────────────────
 
 const formatNoProviderError = (): string =>
-  `Error: websearch requires an Anthropic, OpenAI, Moonshot, xAI, Z.ai, DeepSeek, OpenCode Go, or GitHub Copilot provider.
+  `Websearch requires an Anthropic, OpenAI, Moonshot, xAI, Z.ai, DeepSeek, OpenCode Go, or GitHub Copilot provider.
 
 No supported provider credentials were found. Connect a supported provider with /connect, or configure its API key and reload OpenCode.`;
 
 const formatUnsupportedProviderError = (defaultModelID: string): string =>
-  `Error: the default model (${defaultModelID}) is not on a supported web-search provider.
+  `The default model (${defaultModelID}) is not on a supported web-search provider.
 
 Change the default model, or set "websearch" to "always" in a supported model's settings to use it for every search.`;
 
@@ -190,4 +218,4 @@ const resolveSearchRoute = async (ctx: Plugin.Context): Promise<PickedModel> => 
   throw new Error(formatUnsupportedProviderError(defaultModel.data?.modelID ?? UNKNOWN_MODEL));
 };
 
-export { pickModel, resolveSearchRoute, scanProviders, withModelRuntime };
+export { pickModel, resolveSearchEngine, resolveSearchRoute, scanProviders, withModelRuntime };

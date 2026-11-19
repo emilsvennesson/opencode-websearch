@@ -23,7 +23,7 @@ The latest release is Bun v1.4.4, marked "Latest" and tagged bun-v1.4.4. Earlier
 | ---------------- | ----------------------------------------------------------------- |
 | Anthropic        | `web_search_20260318`, falling back to `web_search_20250305`      |
 | OpenAI / ChatGPT | Responses API `web_search`                                        |
-| GitHub Copilot   | Responses API `web_search`                                        |
+| GitHub Copilot   | Responses API `web_search` or Bing ([details](#github-copilot))   |
 | xAI (Grok)       | Responses API `web_search`                                        |
 | Moonshot (Kimi)  | Web Search Pro API                                                |
 | Z.ai (GLM)       | Web Search API, with an API key or the Coding Plan                |
@@ -75,11 +75,31 @@ To search with a specific model instead, set `"websearch": "always"` in its sett
 }
 ```
 
+
 ### OpenCode Go
 
 Only Claude, GPT, Grok, and Kimi models can search on OpenCode Go. If your default model is another Go model, such as GLM, DeepSeek, Qwen, or MiniMax, set `"websearch": "always"` on one that can, as in the example above.
 
 Searches count toward your Go usage limits. `gpt-6-luna` and `claude-haiku-5-5` are cheap; Grok costs many times more. Kimi relies on Moonshot's deprecated `$web_search` tool and may stop working.
+
+### GitHub Copilot
+
+By default, GitHub Copilot uses the Responses API for native web searches. You can also use Copilot's Bing-baked websearch. Either directly or as an automatic fallback for models that don't support it:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "github-copilot": {
+      "settings": {
+        "websearch": {
+          "engine": "auto", // "native" (default) | "bing" | "auto"
+        },
+      },
+    },
+  },
+}
+```
 
 ## Development
 

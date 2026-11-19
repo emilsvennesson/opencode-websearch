@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { pickModel, scanProviders, withModelRuntime } from "../src/config.js";
+import { pickModel, resolveSearchEngine, scanProviders, withModelRuntime } from "../src/config.js";
 import { ProviderResolution } from "../src/types.js";
 
 const SINGLE_RESULT = 1;
@@ -94,6 +94,65 @@ describe("V2 provider scanning", () => {
 
     const [first] = scanned;
     expect(first?.lockedModel).toBeUndefined();
+  });
+});
+
+describe("search engine setting", () => {
+  const copilot = { id: "github-copilot", package: "aisdk:@ai-sdk/github-copilot" };
+  const openai = { id: "openai", package: "@opencode/ai/providers/openai" };
+
+  test("defaults to native", () => {
+    expect(resolveSearchEngine(copilot, "copilot")).toBe("native");
+    expect(resolveSearchEngine({ ...copilot, settings: { websearch: {} } }, "copilot")).toBe(
+      "native",
+    );
+    expect(resolveSearchEngine(openai, "openai")).toBe("native");
+  });
+
+  test("accepts every engine on GitHub Copilot", () => {
+    for (const engine of ["native", "bing", "auto"] as const) {
+      expect(
+        resolveSearchEngine({ ...copilot, settings: { websearch: { engine } } }, "copilot"),
+      ).toBe(engine);
+    }
+  });
+
+  test("accepts only native on other providers", () => {
+    expect(
+      resolveSearchEngine({ ...openai, settings: { websearch: { engine: "native" } } }, "openai"),
+    ).toBe("native");
+    expect(() =>
+      resolveSearchEngine({ ...openai, settings: { websearch: { engine: "bing" } } }, "openai"),
+    ).toThrow(
+      '"websearch" setting of provider "openai" is invalid. Expected { "engine": "native" }.',
+    );
+    expect(() =>
+      resolveSearchEngine({ ...openai, settings: { websearch: { engine: "auto" } } }, "openai"),
+    ).toThrow('"websearch" setting of provider "openai" is invalid');
+  });
+
+  test("rejects unknown engines and malformed settings", () => {
+    expect(() =>
+      resolveSearchEngine({ ...copilot, settings: { websearch: { engine: "google" } } }, "copilot"),
+    ).toThrow('Expected { "engine": "native" | "bing" | "auto" }.');
+    expect(() =>
+      resolveSearchEngine({ ...copilot, settings: { websearch: { engine: 1 } } }, "copilot"),
+    ).toThrow('"websearch" setting of provider "github-copilot" is invalid');
+    expect(() =>
+      resolveSearchEngine({ ...copilot, settings: { websearch: "bing" } }, "copilot"),
+    ).toThrow('"websearch" setting of provider "github-copilot" is invalid');
+  });
+
+  test("is validated while scanning providers", () => {
+    const [first] = scanProviders(
+      [{ ...copilot, settings: { websearch: { engine: "bing" } } }],
+      [],
+    );
+    expect(first?.settings.searchEngine).toBe("bing");
+
+    expect(() =>
+      scanProviders([{ ...openai, settings: { websearch: { engine: "bing" } } }], []),
+    ).toThrow('"websearch" setting of provider "openai" is invalid');
   });
 });
 

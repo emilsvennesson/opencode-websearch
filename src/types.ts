@@ -31,6 +31,13 @@ interface DefaultModel {
 interface ProviderSettings {
   apiKey?: string;
   baseURL?: string;
+  searchEngine?: string;
+}
+
+type SearchEngine = "auto" | "bing" | "native";
+
+interface ScannedProviderSettings extends ProviderSettings {
+  searchEngine?: SearchEngine;
 }
 
 /** Credentials needed to call a provider API. */
@@ -62,7 +69,10 @@ interface SearchConfig extends ProviderCredentials {
   model: string;
   modelBaseURL?: string;
   providerHeaders?: Record<string, string>;
+  searchEngine?: string;
 }
+
+
 
 /** One provider that can serve web-search requests. */
 interface ProviderResolution {
@@ -70,6 +80,7 @@ interface ProviderResolution {
   headers?: Record<string, string>;
   lockedModel?: string;
   providerID: string;
+  searchEngine?: SearchEngine;
   type: ProviderType;
 }
 
@@ -91,4 +102,6 @@ export {
   ProviderType,
   ScannableProviderType,
   SearchConfig,
+  SearchEngine,
+  ScannedProviderSettings,
 };
