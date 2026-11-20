@@ -1,5 +1,6 @@
 import { Plugin } from "@opencode/plugin";
 
+import { clearFallbackCache as clearCopilotFallbackCache } from "./providers/copilot/index.js";
 import { dispatchSearch } from "./providers/index.js";
 import { resolveSearchRoute } from "./config.js";
 
@@ -26,6 +27,7 @@ export default Plugin.define({
               model: route.modelID,
               modelBaseURL: route.modelBaseURL,
               providerHeaders: route.resolution.headers,
+              searchEngine: route.resolution.searchEngine,
             },
             query,
             signal,
@@ -39,5 +41,7 @@ export default Plugin.define({
         editor.default.set(PROVIDER_ID);
       }
     });
+
+    return clearCopilotFallbackCache;
   },
 });

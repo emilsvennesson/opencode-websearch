@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
+import { parseResults } from "../src/providers/copilot/bing.js";
 import { executeSearch as executeDeepSeekSearch } from "../src/providers/deepseek/index.js";
 import { executeKimiSearch } from "../src/providers/opencode-go/kimi.js";
 import {
@@ -192,6 +193,52 @@ describe("DeepSeek web search", () => {
         title: "Bun",
         url: "https://bun.sh",
       },
+    ]);
+  });
+});
+
+describe("GitHub Copilot Bing results", () => {
+  const originalTZ = process.env.TZ;
+
+  afterEach(() => {
+    process.env.TZ = originalTZ;
+  });
+
+  test("reads dates without an offset as UTC", () => {
+    process.env.TZ = "Europe/Berlin";
+    const results = parseResults(
+      JSON.stringify({
+        search_result_groups: [
+          {
+            items: [
+              {
+                last_updated_date: "2026-10-22T00:00:00.0000000",
+                snippets: ["First", "Second"],
+                title: "Bun",
+                url: "https://bun.sh",
+              },
+              {
+                last_updated_date: "2026-10-22T00:00:00.0000000Z",
+                snippets: null,
+                title: null,
+                url: "https://bun.com",
+              },
+              { last_updated_date: null, url: "https://github.com/oven-sh/bun" },
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(results).toEqual([
+      {
+        content: "First\n\nSecond",
+        time: { published: PUBLISHED },
+        title: "Bun",
+        url: "https://bun.sh",
+      },
+      { time: { published: PUBLISHED }, url: "https://bun.com" },
+      { time: {}, url: "https://github.com/oven-sh/bun" },
     ]);
   });
 });

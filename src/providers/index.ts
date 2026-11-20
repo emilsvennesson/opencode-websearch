@@ -39,7 +39,7 @@ const modelSearch =
 const PROVIDER_ADAPTERS: Record<ProviderType, ProviderAdapter> = {
   anthropic: { label: "Anthropic", search: modelSearch(executeAnthropicSearch) },
   chatgpt: { label: "ChatGPT", search: modelSearch(executeChatGPTSearch) },
-  copilot: { label: "GitHub Copilot", search: modelSearch(executeCopilotSearch) },
+  copilot: { label: "GitHub Copilot", search: executeCopilotSearch },
   deepseek: { label: "DeepSeek", search: executeDeepSeekSearch },
   moonshot: { label: "Moonshot", search: executeMoonshotSearch },
   openai: { label: "OpenAI", search: modelSearch(executeOpenAISearch) },
