@@ -72,8 +72,6 @@ interface SearchConfig extends ProviderCredentials {
   searchEngine?: string;
 }
 
-
-
 /** One provider that can serve web-search requests. */
 interface ProviderResolution {
   credentials: ProviderCredentials;

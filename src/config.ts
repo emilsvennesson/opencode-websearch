@@ -68,7 +68,10 @@ const stripV1Suffix = (url: string): string => url.replace(/\/v1\/?$/, "");
 const normalizeBaseURL = (type: ScannableProviderType, baseURL: string): string =>
   type === "anthropic" ? stripV1Suffix(baseURL) : baseURL;
 
-const resolveSettings = (provider: ProviderData, type: ScannableProviderType): ScannedProviderSettings => {
+const resolveSettings = (
+  provider: ProviderData,
+  type: ScannableProviderType,
+): ScannedProviderSettings => {
   const apiKey = extractStringOption(provider.settings, "apiKey");
   const configuredURL = extractStringOption(provider.settings, "baseURL");
 
